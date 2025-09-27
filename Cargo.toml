@@ -3,12 +3,14 @@ name = "reputest"
 version = "0.1.0"
 edition = "2021"
 authors = ["Your Name <your.email@example.com>"]
-description = "A Rust Azure Function that prints 'Reputesting!' to logs"
+description = "A Rust web service that prints 'Reputesting!' to logs, designed for Azure Container Instances"
 
 [dependencies]
-azure_functions = "0.7"
+warp = "0.3"
+tokio = { version = "1", features = ["rt", "macros", "rt-multi-thread"] }
 log = "0.4"
 env_logger = "0.10"
+serde_json = "1.0"
 
 [profile.release]
 opt-level = "z"

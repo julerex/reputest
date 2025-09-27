@@ -7,9 +7,10 @@ on:
     branches: [ main, master ]
 
 env:
-  AZURE_FUNCTIONAPP_NAME: reputest-function-app
-  AZURE_FUNCTIONAPP_PACKAGE_PATH: '.'  # set this to the path to your web app project, defaults to the repository root
-  DOTNET_VERSION: '6.0.x'  # set this to the dotnet version to use
+  AZURE_CONTAINER_REGISTRY: your-registry.azurecr.io
+  CONTAINER_NAME: reputest
+  RESOURCE_GROUP: reputest-rg
+  CONTAINER_GROUP_NAME: reputest-container
 
 jobs:
   build:
@@ -36,13 +37,24 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-cargo-
           
-    - name: Install Azure Functions Core Tools
-      run: |
-        npm install -g azure-functions-core-tools@4 --unsafe-perm true
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: Log in to Azure Container Registry
+      uses: azure/docker-login@v1
+      with:
+        login-server: ${{ env.AZURE_CONTAINER_REGISTRY }}
+        username: ${{ secrets.ACR_USERNAME }}
+        password: ${{ secrets.ACR_PASSWORD }}
         
-    - name: Build Rust project
-      run: |
-        cargo build --release
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: true
+        tags: |
+          ${{ env.AZURE_CONTAINER_REGISTRY }}/${{ env.CONTAINER_NAME }}:latest
+          ${{ env.AZURE_CONTAINER_REGISTRY }}/${{ env.CONTAINER_NAME }}:${{ github.sha }}
         
     - name: Run tests
       run: |
@@ -68,36 +80,28 @@ jobs:
     steps:
     - name: 'Checkout GitHub Action'
       uses: actions/checkout@v4
-      
-    - name: Setup Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        
-    - name: Cache cargo registry
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-cargo-
-          
-    - name: Build Rust project for deployment
-      run: |
-        cargo build --release
         
     - name: 'Login via Azure CLI'
       uses: azure/login@v1
       with:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
         
-    - name: 'Run Azure Functions Action'
-      uses: Azure/functions-action@v1
-      id: fa
-      with:
-        app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}
-        package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
-        publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
+    - name: 'Deploy to Azure Container Instances'
+      run: |
+        # Create resource group if it doesn't exist
+        az group create --name ${{ env.RESOURCE_GROUP }} --location eastus || true
+        
+        # Deploy container instance
+        az container create \
+          --resource-group ${{ env.RESOURCE_GROUP }} \
+          --name ${{ env.CONTAINER_GROUP_NAME }} \
+          --image ${{ env.AZURE_CONTAINER_REGISTRY }}/${{ env.CONTAINER_NAME }}:latest \
+          --registry-login-server ${{ env.AZURE_CONTAINER_REGISTRY }} \
+          --registry-username ${{ secrets.ACR_USERNAME }} \
+          --registry-password ${{ secrets.ACR_PASSWORD }} \
+          --dns-name-label reputest-aci \
+          --ports 8080 \
+          --environment-variables RUST_LOG=info PORT=8080 \
+          --cpu 0.5 \
+          --memory 0.5 \
+          --restart-policy Always

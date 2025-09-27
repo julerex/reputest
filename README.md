@@ -1,21 +1,23 @@
-# Reputest - Rust Azure Function
+# Reputest - Rust Container Service
 
-A simple Rust application that runs on Azure Functions and prints "Reputesting!" to the logs. This project includes GitHub Actions for CI/CD and can be deployed to Azure Functions.
+A simple Rust web service that runs on Azure Container Instances and prints "Reputesting!" to the logs. This project uses Docker containerization with warp web server and includes GitHub Actions for CI/CD.
 
 ## Features
 
-- 🦀 Rust-based Azure Function
+- 🦀 Rust-based web service containerized with Docker
+- 🌐 Warp web server for HTTP handling
 - 📝 Logs "Reputesting!" message
 - 🚀 GitHub Actions CI/CD pipeline
-- ☁️ Azure Functions deployment ready
+- ☁️ Azure Container Instances deployment ready
 - 🔧 Local development support
+- 🐳 Multi-stage Docker build for optimized image size
 
 ## Prerequisites
 
 - [Rust](https://rustup.rs/) (latest stable version)
-- [Azure Functions Core Tools](https://docs.microsoft.com/en-us/azure/azure-functions/functions-run-local)
+- [Docker](https://docs.docker.com/get-docker/) (for containerization)
 - [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli) (for deployment)
-- [Node.js](https://nodejs.org/) (for Azure Functions Core Tools)
+- [Azure Container Registry](https://docs.microsoft.com/en-us/azure/container-registry/) (for storing container images)
 
 ## Local Development
 
@@ -26,51 +28,44 @@ git clone <your-repo-url>
 cd reputest
 ```
 
-### 2. Install Dependencies
+### 2. Build and Run Locally
 
-#### Install/Update Azure Functions Core Tools
-(on Ubuntu)
-
-
-```bash
-# add the Microsoft package repository for your Ubuntu version
-wget -q https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
-sudo dpkg -i packages-microsoft-prod.deb
-
-# Update the package list to refresh the Microsoft repository feed
-sudo apt-get update
-
-# sudo apt-get install azure-functions-core-tools-4
-sudo apt-get upgrade azure-functions-core-tools-4
-
-# Verify the upgrade
-func --version
-```
-
-#### Build the project
+#### Build the Rust project
 
 ```bash
 # Build the project
 cargo build --release
+
+# Run the application locally
+cargo run
 ```
 
-### 3. Run Locally
+The service will be available at `http://localhost:8080`
+
+#### Build and run with Docker
 
 ```bash
-# Start the Azure Functions runtime
-func start
+# Build the Docker image
+docker build -t reputest .
+
+# Run the container
+docker run -p 8080:8080 reputest
 ```
 
-The function will be available at `http://localhost:7071/api/reputest`
-
-### 4. Test the Function
+### 3. Test the Service
 
 ```bash
-# Test with curl
-curl http://localhost:7071/api/reputest
+# Test the main endpoint
+curl http://localhost:8080/reputest
+
+# Test the health check endpoint
+curl http://localhost:8080/health
+
+# Test the root endpoint
+curl http://localhost:8080/
 
 # Or visit in your browser
-open http://localhost:7071/api/reputest
+open http://localhost:8080/reputest
 ```
 
 ## Deployment to Azure
@@ -82,24 +77,18 @@ open http://localhost:7071/api/reputest
 az login
 
 # Create a resource group
-az group create --name myResourceGroup --location eastus
+az group create --name reputest-rg --location eastus
 
-# Create a storage account
-az storage account create \
-  --name mystorageaccount \
-  --location eastus \
-  --resource-group myResourceGroup \
-  --sku Standard_LRS
+# Create an Azure Container Registry
+az acr create \
+  --resource-group reputest-rg \
+  --name yourregistry \
+  --sku Basic \
+  --admin-enabled true
 
-# Create the function app
-az functionapp create \
-  --resource-group myResourceGroup \
-  --consumption-plan-location eastus \
-  --runtime custom \
-  --runtime-version 3.1 \
-  --functions-version 4 \
-  --name myFunctionApp \
-  --storage-account mystorageaccount
+# Get the ACR login server and credentials
+az acr show --name yourregistry --query loginServer --output tsv
+az acr credential show --name yourregistry --query passwords[0].value --output tsv
 ```
 
 ### 2. Configure GitHub Secrets
@@ -107,27 +96,26 @@ az functionapp create \
 Add these secrets to your GitHub repository:
 
 - `AZURE_CREDENTIALS`: Azure service principal credentials
-- `AZURE_FUNCTIONAPP_PUBLISH_PROFILE`: Function app publish profile
+- `ACR_USERNAME`: Azure Container Registry username (usually the registry name)
+- `ACR_PASSWORD`: Azure Container Registry password
 
 To get the credentials:
 
 ```bash
 # Create service principal
-az ad sp create-for-rbac --name "myApp" --role contributor \
-  --scopes /subscriptions/{subscription-id}/resourceGroups/{resource-group} \
+az ad sp create-for-rbac --name "reputest-app" --role contributor \
+  --scopes /subscriptions/{subscription-id}/resourceGroups/reputest-rg \
   --sdk-auth
 
-# Get publish profile
-az functionapp deployment list-publishing-profiles \
-  --name myFunctionApp \
-  --resource-group myResourceGroup \
-  --xml
+# Get ACR credentials
+az acr credential show --name yourregistry --query username --output tsv
+az acr credential show --name yourregistry --query passwords[0].value --output tsv
 ```
 
 ### 3. Update Configuration
 
-1. Update `AZURE_FUNCTIONAPP_NAME` in `.github/workflows/ci-cd.yml`
-2. Update `AZURE_FUNCTIONAPP_NAME` in `azure-pipelines.yml` (if using Azure DevOps)
+1. Update `AZURE_CONTAINER_REGISTRY` in `.github/workflows/ci-cd.yml` with your ACR login server
+2. Update `RESOURCE_GROUP` and `CONTAINER_GROUP_NAME` in the workflow if needed
 
 ### 4. Deploy
 
@@ -139,20 +127,21 @@ git commit -m "Initial commit"
 git push origin main
 ```
 
+After deployment, your service will be available at:
+`http://reputest-aci.eastus.azurecontainer.io:8080/reputest`
+
 ## Project Structure
 
 ```
 reputest/
 ├── src/
-│   └── main.rs              # Main Rust function
-├── azure-functions/
-│   └── function.json        # Azure Functions configuration
+│   └── main.rs              # Main Rust web service with warp server
 ├── .github/
 │   └── workflows/
-│       └── ci-cd.yml        # GitHub Actions workflow
-├── Cargo.toml               # Rust dependencies
-├── host.json                # Azure Functions host configuration
-├── local.settings.json      # Local development settings
+│       └── ci-cd.yml        # GitHub Actions workflow for ACI deployment
+├── Cargo.toml               # Rust dependencies (warp, tokio)
+├── Dockerfile               # Multi-stage Docker build configuration
+├── aci-deployment.json      # Azure Container Instance deployment template
 ├── azure-pipelines.yml      # Azure DevOps pipeline (alternative)
 └── README.md               # This file
 ```
@@ -166,7 +155,8 @@ The GitHub Actions workflow includes:
 - 🧪 Running tests
 - 🔍 Clippy linting
 - 📝 Rustfmt formatting check
-- 🚀 Automatic deployment to Azure Functions
+- 🐳 Docker image building and pushing to Azure Container Registry
+- 🚀 Automatic deployment to Azure Container Instances
 
 ## Customization
 
@@ -178,26 +168,58 @@ Edit `src/main.rs` to change the logged message:
 info!("Your custom message here!");
 ```
 
-### Adding More Functions
+### Adding More Endpoints
 
-1. Add new functions to `src/main.rs`
-2. Create corresponding `function.json` files in the `azure-functions/` directory
-3. Update the Azure Functions configuration as needed
+1. Add new routes to the warp server in `src/main.rs`
+2. Update the Dockerfile if additional dependencies are needed
+3. Test locally with `cargo run` or `docker run`
+
+### How Container Deployment Works
+
+This project uses Azure Container Instances, which provides a simple way to run containers in Azure without managing virtual machines. Key points:
+
+- The `Dockerfile` creates a multi-stage build for optimized image size
+- The container runs as a non-root user for security
+- Environment variables control logging and port configuration
+- Azure Container Registry stores the built images
+- GitHub Actions automatically builds and deploys on code changes
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **Build fails**: Ensure you have the latest Rust toolchain
-2. **Deployment fails**: Check Azure credentials and function app name
-3. **Function not responding**: Verify the function.json configuration
+1. **Build fails**: Ensure you have the latest Rust toolchain and Docker installed
+2. **Deployment fails**: Check Azure credentials and container registry configuration
+3. **Container not responding**: Verify the container is running and port 8080 is accessible
 
 ### Logs
 
-View function logs in the Azure portal or using Azure CLI:
+View container logs in the Azure portal or using Azure CLI:
 
 ```bash
-az functionapp logs tail --name myFunctionApp --resource-group myResourceGroup
+az container logs --name reputest-container --resource-group reputest-rg
+```
+
+### Manual Deployment
+
+You can also deploy manually using the Azure CLI:
+
+```bash
+# Build and push the image manually
+docker build -t yourregistry.azurecr.io/reputest:latest .
+docker push yourregistry.azurecr.io/reputest:latest
+
+# Deploy to Azure Container Instances
+az container create \
+  --resource-group reputest-rg \
+  --name reputest-container \
+  --image yourregistry.azurecr.io/reputest:latest \
+  --registry-login-server yourregistry.azurecr.io \
+  --registry-username yourregistry \
+  --registry-password yourpassword \
+  --dns-name-label reputest-aci \
+  --ports 8080 \
+  --environment-variables RUST_LOG=info PORT=8080
 ```
 
 ## Contributing

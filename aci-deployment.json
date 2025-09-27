@@ -1,0 +1,50 @@
+{
+  "apiVersion": "2021-07-01",
+  "type": "Microsoft.ContainerInstance/containerGroups",
+  "name": "reputest-container",
+  "location": "[resourceGroup().location]",
+  "properties": {
+    "containers": [
+      {
+        "name": "reputest",
+        "properties": {
+          "image": "your-registry.azurecr.io/reputest:latest",
+          "ports": [
+            {
+              "port": 8080,
+              "protocol": "TCP"
+            }
+          ],
+          "environmentVariables": [
+            {
+              "name": "RUST_LOG",
+              "value": "info"
+            },
+            {
+              "name": "PORT",
+              "value": "8080"
+            }
+          ],
+          "resources": {
+            "requests": {
+              "cpu": 0.5,
+              "memoryInGb": 0.5
+            }
+          }
+        }
+      }
+    ],
+    "osType": "Linux",
+    "ipAddress": {
+      "type": "Public",
+      "ports": [
+        {
+          "port": 8080,
+          "protocol": "TCP"
+        }
+      ],
+      "dnsNameLabel": "reputest-aci"
+    },
+    "restartPolicy": "Always"
+  }
+}
