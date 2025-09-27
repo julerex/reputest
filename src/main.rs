@@ -1,12 +1,12 @@
+use log::info;
 use std::env;
 use std::net::SocketAddr;
 use warp::{http::Response, Filter};
-use log::info;
 
 #[tokio::main]
 async fn main() {
     env_logger::init();
-    
+
     // Define routes
     let reputest_get = warp::path("reputest")
         .and(warp::path::end())
@@ -37,13 +37,11 @@ async fn main() {
                 .body(r#"{"status":"healthy","service":"reputest"}"#)
         });
 
-    let root = warp::path::end()
-        .and(warp::get())
-        .map(|| {
-            Response::builder()
-                .header("Content-Type", "text/plain")
-                .body("Reputest container is running!")
-        });
+    let root = warp::path::end().and(warp::get()).map(|| {
+        Response::builder()
+            .header("Content-Type", "text/plain")
+            .body("Reputest container is running!")
+    });
 
     // Combine all routes
     let routes = reputest_get.or(reputest_post).or(health).or(root);
@@ -55,7 +53,7 @@ async fn main() {
         .expect("PORT must be a valid number");
 
     let addr: SocketAddr = ([0, 0, 0, 0], port).into();
-    
+
     info!("Starting reputest server on {}", addr);
     warp::serve(routes).run(addr).await
 }
