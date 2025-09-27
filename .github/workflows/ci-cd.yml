@@ -100,8 +100,8 @@ jobs:
           --registry-username ${{ secrets.ACR_USERNAME }} \
           --registry-password ${{ secrets.ACR_PASSWORD }} \
           --dns-name-label reputest-aci \
-          --ports 8080 \
-          --environment-variables RUST_LOG=info PORT=8080 \
+          --ports 3000 \
+          --environment-variables RUST_LOG=info PORT=3000 \
           --cpu 0.5 \
           --memory 0.5 \
           --restart-policy Always

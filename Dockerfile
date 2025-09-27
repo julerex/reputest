@@ -39,11 +39,11 @@ RUN chown appuser:appuser /usr/local/bin/reputest
 USER appuser
 
 # Expose the port the app runs on
-EXPOSE 8080
+EXPOSE 3000
 
 # Set environment variables
 ENV RUST_LOG=info
-ENV PORT=8080
+ENV PORT=3000
 
 # Run the application
 CMD ["reputest"]

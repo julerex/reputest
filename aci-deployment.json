@@ -11,7 +11,7 @@
           "image": "your-registry.azurecr.io/reputest:latest",
           "ports": [
             {
-              "port": 8080,
+              "port": 3000,
               "protocol": "TCP"
             }
           ],
@@ -22,7 +22,7 @@
             },
             {
               "name": "PORT",
-              "value": "8080"
+              "value": "3000"
             }
           ],
           "resources": {
@@ -39,7 +39,7 @@
       "type": "Public",
       "ports": [
         {
-          "port": 8080,
+          "port": 3000,
           "protocol": "TCP"
         }
       ],

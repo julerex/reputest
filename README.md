@@ -40,7 +40,7 @@ cargo build --release
 cargo run
 ```
 
-The service will be available at `http://localhost:8080`
+The service will be available at `http://localhost:3000`
 
 #### Build and run with Docker
 
@@ -49,23 +49,23 @@ The service will be available at `http://localhost:8080`
 docker build -t reputest .
 
 # Run the container
-docker run -p 8080:8080 reputest
+docker run -p 3000:3000 reputest
 ```
 
 ### 3. Test the Service
 
 ```bash
 # Test the main endpoint
-curl http://localhost:8080/reputest
+curl http://localhost:3000/reputest
 
 # Test the health check endpoint
-curl http://localhost:8080/health
+curl http://localhost:3000/health
 
 # Test the root endpoint
-curl http://localhost:8080/
+curl http://localhost:3000/
 
 # Or visit in your browser
-open http://localhost:8080/reputest
+open http://localhost:3000/reputest
 ```
 
 ## Deployment to Azure
@@ -128,7 +128,7 @@ git push origin main
 ```
 
 After deployment, your service will be available at:
-`http://reputest-aci.eastus.azurecontainer.io:8080/reputest`
+`http://reputest-aci.eastus.azurecontainer.io:3000/reputest`
 
 ## Project Structure
 
@@ -190,7 +190,7 @@ This project uses Azure Container Instances, which provides a simple way to run 
 
 1. **Build fails**: Ensure you have the latest Rust toolchain and Docker installed
 2. **Deployment fails**: Check Azure credentials and container registry configuration
-3. **Container not responding**: Verify the container is running and port 8080 is accessible
+3. **Container not responding**: Verify the container is running and port 3000 is accessible
 
 ### Logs
 
@@ -218,8 +218,8 @@ az container create \
   --registry-username yourregistry \
   --registry-password yourpassword \
   --dns-name-label reputest-aci \
-  --ports 8080 \
-  --environment-variables RUST_LOG=info PORT=8080
+  --ports 3000 \
+  --environment-variables RUST_LOG=info PORT=3000
 ```
 
 ## Contributing

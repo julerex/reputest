@@ -48,9 +48,9 @@ async fn main() {
     // Combine all routes
     let routes = reputest_get.or(reputest_post).or(health).or(root);
 
-    // Get port from environment variable, default to 8080
+    // Get port from environment variable, default to 3000
     let port: u16 = env::var("PORT")
-        .unwrap_or_else(|_| "8080".to_string())
+        .unwrap_or_else(|_| "3000".to_string())
         .parse()
         .expect("PORT must be a valid number");
 
