@@ -1,0 +1,17 @@
+[package]
+name = "reputest"
+version = "0.1.0"
+edition = "2021"
+authors = ["Your Name <your.email@example.com>"]
+description = "A Rust Azure Function that prints 'Reputesting!' to logs"
+
+[dependencies]
+azure_functions = "0.7"
+log = "0.4"
+env_logger = "0.10"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"

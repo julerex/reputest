@@ -1,0 +1,65 @@
+# Azure DevOps Pipeline (alternative to GitHub Actions)
+trigger:
+- main
+- master
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  AZURE_FUNCTIONAPP_NAME: 'your-function-app-name'  # Replace with your actual function app name
+  AZURE_FUNCTIONAPP_PACKAGE_PATH: '.'  # set this to the path to your web app project, defaults to the repository root
+
+steps:
+- task: UseDotNet@2
+  displayName: 'Use .NET Core sdk'
+  inputs:
+    packageType: 'sdk'
+    version: '6.0.x'
+
+- task: Cache@2
+  displayName: 'Cache cargo registry'
+  inputs:
+    key: 'cargo | "$(Agent.OS)" | Cargo.lock'
+    restoreKeys: |
+      cargo | "$(Agent.OS)"
+    path: |
+      ~/.cargo/registry
+      ~/.cargo/git
+      target
+
+- script: |
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+    source ~/.cargo/env
+    rustup default stable
+    rustup component add rustfmt clippy
+  displayName: 'Install Rust'
+
+- script: |
+    source ~/.cargo/env
+    cargo build --release
+  displayName: 'Build Rust project'
+
+- script: |
+    source ~/.cargo/env
+    cargo test
+  displayName: 'Run tests'
+
+- script: |
+    source ~/.cargo/env
+    cargo clippy --all-targets --all-features -- -D warnings
+  displayName: 'Run clippy'
+
+- script: |
+    source ~/.cargo/env
+    cargo fmt --all -- --check
+  displayName: 'Check formatting'
+
+- task: AzureFunctionApp@1
+  displayName: 'Azure Functions App Deploy'
+  inputs:
+    azureSubscription: 'your-azure-subscription'  # Replace with your Azure subscription
+    appType: 'functionApp'
+    appName: '$(AZURE_FUNCTIONAPP_NAME)'
+    package: '$(System.DefaultWorkingDirectory)'
+    deploymentMethod: 'zipDeploy'
