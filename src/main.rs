@@ -1,5 +1,5 @@
 use std::env;
-use std::net::{Ipv4Addr, SocketAddr};
+use std::net::SocketAddr;
 use warp::{http::Response, Filter};
 use log::info;
 
@@ -7,10 +7,10 @@ use log::info;
 async fn main() {
     env_logger::init();
     
-    // Handle the main endpoint
-    let reputest = warp::path("reputest")
+    // Define routes
+    let reputest_get = warp::path("reputest")
         .and(warp::path::end())
-        .and(warp::get().or(warp::post()))
+        .and(warp::get())
         .map(|| {
             info!("Reputesting!");
             Response::builder()
@@ -18,17 +18,17 @@ async fn main() {
                 .body("Reputesting!")
         });
 
-    // Handle root path for health checks
-    let health = warp::path::end()
-        .and(warp::get())
+    let reputest_post = warp::path("reputest")
+        .and(warp::path::end())
+        .and(warp::post())
         .map(|| {
+            info!("Reputesting!");
             Response::builder()
                 .header("Content-Type", "text/plain")
-                .body("Reputest container is running!")
+                .body("Reputesting!")
         });
 
-    // Handle health check endpoint
-    let health_check = warp::path("health")
+    let health = warp::path("health")
         .and(warp::path::end())
         .and(warp::get())
         .map(|| {
@@ -37,8 +37,16 @@ async fn main() {
                 .body(r#"{"status":"healthy","service":"reputest"}"#)
         });
 
+    let root = warp::path::end()
+        .and(warp::get())
+        .map(|| {
+            Response::builder()
+                .header("Content-Type", "text/plain")
+                .body("Reputest container is running!")
+        });
+
     // Combine all routes
-    let routes = reputest.or(health).or(health_check);
+    let routes = reputest_get.or(reputest_post).or(health).or(root);
 
     // Get port from environment variable, default to 8080
     let port: u16 = env::var("PORT")
