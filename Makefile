@@ -6,7 +6,6 @@
 # Derived variables
 FULL_IMAGE_NAME = $(AZURE_REGISTRY_NAME).azurecr.io/$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)
 
-# Azure CLI commands
 AZ = az
 DOCKER = docker
 
@@ -24,10 +23,28 @@ check-prereqs: ## Check if required tools are installed
 	@command -v $(DOCKER) >/dev/null 2>&1 || { echo "Docker is required but not installed. Aborting." >&2; exit 1; }
 	@echo "All prerequisites are installed."
 
+
+# Azure CLI commands
+
 # Azure setup
+
+# Note that you need to log in AND visit the Azure portal
+# Otherwise you will still get the "No subscriptions found for ..." error
 .PHONY: azure-login
 azure-login: ## Login to Azure
 	$(AZ) login
+
+.PHONY: azure-list-resource-groups
+azure-list-resource-groups: ## List all Azure resource groups
+	@echo "Azure resource groups in your subscription:"
+	$(AZ) group list --output table
+
+
+.PHONY: azure-list-registries
+azure-list-registries: ## List all Azure Container Registries in subscription
+	@echo "Azure Container Registries in your subscription:"
+	$(AZ) acr list --output table
+
 
 .PHONY: azure-create-resource-group
 azure-create-resource-group: ## Create Azure resource group
@@ -39,23 +56,6 @@ azure-create-container-registry: ## Create Azure Container Registry
 
 .PHONY: azure-setup
 azure-setup: azure-login azure-create-resource-group azure-create-container-registry ## Complete Azure setup (login, create RG and ACR)
-
-# Docker operations
-.PHONY: docker-build
-docker-build: ## Build Docker image
-	$(DOCKER) build -t $(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG) .
-
-.PHONY: docker-tag
-docker-tag: ## Tag image for Azure Container Registry
-	$(DOCKER) tag $(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG) $(FULL_IMAGE_NAME)
-
-.PHONY: azure-login-acr
-azure-login-acr: ## Login to Azure Container Registry
-	$(AZ) acr login --name $(AZURE_REGISTRY_NAME)
-
-.PHONY: docker-push
-docker-push: azure-login-acr docker-tag ## Push image to Azure Container Registry
-	$(DOCKER) push $(FULL_IMAGE_NAME)
 
 # Azure Container Instance operations
 .PHONY: azure-deploy-aci
@@ -115,7 +115,7 @@ dev-deploy: docker-build docker-push azure-deploy-aci ## Complete development de
 .PHONY: prod-deploy
 prod-deploy: check-prereqs docker-build docker-push azure-deploy-aci ## Complete production deployment with checks
 
-# Utility targets 
+# Docker targets ############################################################
 
 .PHONY: docker-install
 docker-install: ## Install Docker
@@ -130,6 +130,34 @@ docker-status: ## Show Docker container status
 .PHONY: docker-clean
 docker-clean: ## Clean up local Docker images
 	@ sudo $(DOCKER) rmi $(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG) $(FULL_IMAGE_NAME) || true
+
+
+.PHONY: docker-build 
+docker-build: ## Build Docker image
+	sudo $(DOCKER) build -t $(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG) .
+
+
+# Docker operations
+.PHONY: docker-build
+docker-build: ## Build Docker image
+	sudo $(DOCKER) build -t $(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG) .
+
+.PHONY: docker-tag
+docker-tag: ## Tag image for Azure Container Registry
+	$(DOCKER) tag $(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG) $(FULL_IMAGE_NAME)
+
+.PHONY: azure-login-acr
+azure-login-acr: ## Login to Azure Container Registry
+	$(AZ) acr login --name $(AZURE_REGISTRY_NAME)
+
+.PHONY: docker-push
+docker-push: azure-login-acr docker-tag ## Push image to Azure Container Registry
+	$(DOCKER) push $(FULL_IMAGE_NAME)
+
+
+# Utility targets ############################################################
+
+
 
 .PHONY: info
 info: ## Show deployment information
@@ -148,3 +176,18 @@ info: ## Show deployment information
 # Quick start target
 .PHONY: quickstart
 quickstart: azure-setup prod-deploy azure-get-url-container ## Complete setup and deployment in one command
+
+# Fly targets ############################################################
+
+.PHONY: fly-launch
+fly-launch: ## Launch Fly app
+	fly launch
+
+
+.PHONY: fly-login
+fly-login: ## Login to Fly
+	fly auth login
+
+.PHONY: fly-deploy
+fly-deploy: ## Deploy to Fly
+	fly deploy
