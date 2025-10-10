@@ -40,7 +40,7 @@ async fn main() {
     let root = warp::path::end().and(warp::get()).map(|| {
         Response::builder()
             .header("Content-Type", "text/plain")
-            .body("Reputest container is running!")
+            .body("A new reputest is in the house!")
     });
 
     // Combine all routes
