@@ -3,30 +3,58 @@ name = "reputest"
 version = "0.1.0"
 edition = "2021"
 authors = ["Your Name <your.email@example.com>"]
-description = "A Rust web service that prints 'Reputesting!' to logs, designed for Azure Container Instances"
+description = "A Rust web service that provides HTTP endpoints for testing and demonstration purposes, with Twitter/X API integration using OAuth 1.0a authentication"
+license = "MIT"
+repository = "https://github.com/yourusername/reputest"
+homepage = "https://github.com/yourusername/reputest"
+documentation = "https://docs.rs/reputest"
+readme = "README.md"
+keywords = ["web", "api", "twitter", "oauth", "axum", "rust"]
+categories = ["web-programming", "api-bindings"]
 
 [dependencies]
+# Web framework for building HTTP servers
 axum = "0.7"
+# Middleware and service abstractions
 tower = "0.4"
+# HTTP middleware for Tower (CORS, tracing)
 tower-http = { version = "0.5", features = ["cors", "trace"] }
+# Async runtime
 tokio = { version = "1", features = ["rt", "macros", "rt-multi-thread"] }
+# Logging facade
 log = "0.4"
+# Logging implementation that reads from environment variables
 env_logger = "0.10"
+# JSON serialization/deserialization
 serde_json = "1.0"
+# HTTP client for making requests to Twitter API
 reqwest = { version = "0.11", features = ["json"] }
+# Serialization framework
 serde = { version = "1.0", features = ["derive"] }
+# SHA-1 hashing for OAuth signature generation
 sha1 = "0.10"
+# Random number generation for OAuth nonces
 rand = "0.8"
+# Base64 encoding/decoding for OAuth signatures
 base64 = "0.21"
+# HMAC implementation for OAuth signature generation
 hmac = "0.12"
 
 [dev-dependencies]
+# Testing utilities for async code
 tokio-test = "0.4"
+# Tower utilities for testing
 tower = { version = "0.4", features = ["util"] }
+# HTTP body utilities for testing
 http-body-util = "0.1"
 
+# Release profile configuration for optimized production builds
 [profile.release]
+# Optimize for size (smallest binary)
 opt-level = "z"
+# Enable Link Time Optimization for better performance
 lto = true
+# Use single codegen unit for better optimization
 codegen-units = 1
+# Abort on panic instead of unwinding (smaller binary)
 panic = "abort"

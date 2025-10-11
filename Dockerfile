@@ -16,5 +16,12 @@ RUN cargo build --release --bin reputest
 # We do not need the Rust toolchain to run the binary!
 FROM debian:bookworm-slim AS runtime
 WORKDIR /app
+
+# Install required system dependencies
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    libssl3 \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=builder /app/target/release/reputest /usr/local/bin
 ENTRYPOINT ["/usr/local/bin/reputest"]
