@@ -1,14 +1,41 @@
-use log::{info, error};
+use axum::{
+    http::StatusCode,
+    response::Json,
+    routing::{get, post},
+    Router,
+};
+use base64::Engine;
+use hmac::{Hmac, Mac};
+use log::{error, info};
+use rand::Rng;
+use reqwest::Client;
+use serde_json::{json, Value};
+use sha1::Sha1;
+use std::collections::BTreeMap;
 use std::env;
 use std::net::SocketAddr;
-use warp::{http::Response, Filter};
-use reqwest::Client;
-use serde_json::json;
-use sha1::Sha1;
-use rand::Rng;
-use std::collections::BTreeMap;
-use hmac::{Hmac, Mac};
-use base64::Engine;
+use tower::ServiceBuilder;
+use tower_http::trace::TraceLayer;
+
+// Configuration struct for Twitter API credentials
+#[derive(Debug)]
+struct TwitterConfig {
+    consumer_key: String,
+    consumer_secret: String,
+    access_token: String,
+    access_token_secret: String,
+}
+
+impl TwitterConfig {
+    fn from_env() -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        Ok(TwitterConfig {
+            consumer_key: env::var("xapi_consumer_key")?,
+            consumer_secret: env::var("xapi_consumer_secret")?,
+            access_token: env::var("xapi_access_token")?,
+            access_token_secret: env::var("xapi_access_token_secret")?,
+        })
+    }
+}
 
 fn generate_oauth_signature(
     method: &str,
@@ -23,7 +50,11 @@ fn generate_oauth_signature(
         if i > 0 {
             param_string.push('&');
         }
-        param_string.push_str(&format!("{}={}", percent_encode(key), percent_encode(value)));
+        param_string.push_str(&format!(
+            "{}={}",
+            percent_encode(key),
+            percent_encode(value)
+        ));
     }
 
     // Create signature base string
@@ -35,15 +66,19 @@ fn generate_oauth_signature(
     );
 
     // Create signing key
-    let signing_key = format!("{}&{}", percent_encode(consumer_secret), percent_encode(token_secret));
+    let signing_key = format!(
+        "{}&{}",
+        percent_encode(consumer_secret),
+        percent_encode(token_secret)
+    );
 
     // Generate HMAC-SHA1 signature
     type HmacSha1 = Hmac<Sha1>;
-    let mut mac = HmacSha1::new_from_slice(signing_key.as_bytes())
-        .expect("HMAC can take key of any size");
+    let mut mac =
+        HmacSha1::new_from_slice(signing_key.as_bytes()).expect("HMAC can take key of any size");
     mac.update(signature_base.as_bytes());
     let result = mac.finalize();
-    
+
     base64::engine::general_purpose::STANDARD.encode(result.into_bytes())
 }
 
@@ -67,38 +102,33 @@ fn generate_nonce() -> String {
     nonce
 }
 
-async fn post_tweet(text: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-    let consumer_key = env::var("xapi_consumer_key")?;
-    let consumer_secret = env::var("xapi_consumer_secret")?;
-    let access_token = env::var("xapi_access_token")?;
-    let access_token_secret = env::var("xapi_access_token_secret")?;
-
-    let client = Client::new();
-    let url = "https://api.x.com/2/tweets";
-    
-    let payload = json!({
-        "text": text
-    });
-
-    // Generate OAuth parameters
-    let timestamp = std::time::SystemTime::now()
+fn get_current_timestamp() -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    Ok(std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)?
         .as_secs()
-        .to_string();
-    let nonce = generate_nonce();
+        .to_string())
+}
 
+fn build_oauth_params(
+    config: &TwitterConfig,
+) -> Result<BTreeMap<String, String>, Box<dyn std::error::Error + Send + Sync>> {
     let mut oauth_params = BTreeMap::new();
-    oauth_params.insert("oauth_consumer_key".to_string(), consumer_key.clone());
-    oauth_params.insert("oauth_nonce".to_string(), nonce);
-    oauth_params.insert("oauth_signature_method".to_string(), "HMAC-SHA1".to_string());
-    oauth_params.insert("oauth_timestamp".to_string(), timestamp);
-    oauth_params.insert("oauth_token".to_string(), access_token.clone());
+    oauth_params.insert(
+        "oauth_consumer_key".to_string(),
+        config.consumer_key.clone(),
+    );
+    oauth_params.insert("oauth_nonce".to_string(), generate_nonce());
+    oauth_params.insert(
+        "oauth_signature_method".to_string(),
+        "HMAC-SHA1".to_string(),
+    );
+    oauth_params.insert("oauth_timestamp".to_string(), get_current_timestamp()?);
+    oauth_params.insert("oauth_token".to_string(), config.access_token.clone());
     oauth_params.insert("oauth_version".to_string(), "1.0".to_string());
+    Ok(oauth_params)
+}
 
-    let signature = generate_oauth_signature("POST", url, &oauth_params, &consumer_secret, &access_token_secret);
-    oauth_params.insert("oauth_signature".to_string(), signature);
-
-    // Build Authorization header
+fn build_auth_header(oauth_params: &BTreeMap<String, String>) -> String {
     let mut auth_header = String::from("OAuth ");
     for (i, (key, value)) in oauth_params.iter().enumerate() {
         if i > 0 {
@@ -106,7 +136,33 @@ async fn post_tweet(text: &str) -> Result<String, Box<dyn std::error::Error + Se
         }
         auth_header.push_str(&format!("{}=\"{}\"", key, percent_encode(value)));
     }
+    auth_header
+}
 
+async fn post_tweet(text: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    let config = TwitterConfig::from_env()?;
+    let client = Client::new();
+    let url = "https://api.x.com/2/tweets";
+
+    let payload = json!({
+        "text": text
+    });
+
+    // Build OAuth parameters and signature
+    let mut oauth_params = build_oauth_params(&config)?;
+    let signature = generate_oauth_signature(
+        "POST",
+        url,
+        &oauth_params,
+        &config.consumer_secret,
+        &config.access_token_secret,
+    );
+    oauth_params.insert("oauth_signature".to_string(), signature);
+
+    // Build Authorization header
+    let auth_header = build_auth_header(&oauth_params);
+
+    // Send the request
     let response = client
         .post(url)
         .header("Authorization", auth_header)
@@ -115,6 +171,7 @@ async fn post_tweet(text: &str) -> Result<String, Box<dyn std::error::Error + Se
         .send()
         .await?;
 
+    // Handle response
     if response.status().is_success() {
         let response_text = response.text().await?;
         info!("Tweet posted successfully: {}", response_text);
@@ -126,82 +183,71 @@ async fn post_tweet(text: &str) -> Result<String, Box<dyn std::error::Error + Se
     }
 }
 
+// Route handler functions
+async fn handle_reputest_get() -> &'static str {
+    info!("Reputesting!");
+    "Reputesting!"
+}
+
+async fn handle_reputest_post() -> &'static str {
+    info!("Reputesting!");
+    "Reputesting!"
+}
+
+async fn handle_health() -> Json<Value> {
+    Json(json!({"status": "healthy", "service": "reputest"}))
+}
+
+async fn handle_tweet() -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    match post_tweet("Hello world").await {
+        Ok(response) => {
+            info!("Tweet posted successfully");
+            Ok(Json(
+                json!({"status": "success", "message": "Tweet posted", "response": response}),
+            ))
+        }
+        Err(e) => {
+            error!("Failed to post tweet: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(
+                    json!({"status": "error", "message": "Failed to post tweet", "error": e.to_string()}),
+                ),
+            ))
+        }
+    }
+}
+
+async fn handle_root() -> &'static str {
+    "A new reputest is in the house!"
+}
+
+fn get_server_port() -> u16 {
+    env::var("PORT")
+        .unwrap_or_else(|_| "3000".to_string())
+        .parse()
+        .expect("PORT must be a valid number")
+}
+
 #[tokio::main]
 async fn main() {
     env_logger::init();
 
-    // Define routes
-    let reputest_get = warp::path("reputest")
-        .and(warp::path::end())
-        .and(warp::get())
-        .map(|| {
-            info!("Reputesting!");
-            Response::builder()
-                .header("Content-Type", "text/plain")
-                .body("Reputesting!")
-        });
+    // Build our application with a route
+    let app = Router::new()
+        .route("/", get(handle_root))
+        .route("/reputest", get(handle_reputest_get))
+        .route("/reputest", post(handle_reputest_post))
+        .route("/health", get(handle_health))
+        .route("/tweet", post(handle_tweet))
+        .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()));
 
-    let reputest_post = warp::path("reputest")
-        .and(warp::path::end())
-        .and(warp::post())
-        .map(|| {
-            info!("Reputesting!");
-            Response::builder()
-                .header("Content-Type", "text/plain")
-                .body("Reputesting!")
-        });
-
-    let health = warp::path("health")
-        .and(warp::path::end())
-        .and(warp::get())
-        .map(|| {
-            Response::builder()
-                .header("Content-Type", "application/json")
-                .body(r#"{"status":"healthy","service":"reputest"}"#)
-        });
-
-    let tweet = warp::path("tweet")
-        .and(warp::path::end())
-        .and(warp::post())
-        .and_then(|| async {
-            match post_tweet("Hello world").await {
-                Ok(response) => {
-                    info!("Tweet posted successfully");
-                    Ok::<_, warp::Rejection>(
-                        Response::builder()
-                            .header("Content-Type", "application/json")
-                            .body(format!(r#"{{"status":"success","message":"Tweet posted","response":"{}"}}"#, response))
-                    )
-                }
-                Err(e) => {
-                    error!("Failed to post tweet: {}", e);
-                    Ok::<_, warp::Rejection>(
-                        Response::builder()
-                            .status(500)
-                            .header("Content-Type", "application/json")
-                            .body(format!(r#"{{"status":"error","message":"Failed to post tweet","error":"{}"}}"#, e))
-                    )
-                }
-            }
-        });
-
-    let root = warp::path::end().and(warp::get()).map(|| {
-        Response::builder()
-            .header("Content-Type", "text/plain")
-            .body("A new reputest is in the house!")
-    });
-
-    // Combine all routes
-    let routes = reputest_get.or(reputest_post).or(health).or(tweet).or(root);
-
-    // Get port from environment variable, default to 3000
-    let port: u16 = env::var("PORT")
-        .unwrap_or_else(|_| "3000".to_string())
-        .parse()
-        .expect("PORT must be a valid number");
-
+    // Start server
+    let port = get_server_port();
     let addr: SocketAddr = ([0, 0, 0, 0], port).into();
 
     info!("Starting reputest server on {}", addr);
-    warp::serve(routes).run(addr).await
+
+    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    axum::serve(listener, app).await.unwrap();
 }
