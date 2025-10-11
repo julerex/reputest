@@ -22,10 +22,22 @@
 //! Tests run in isolation and clean up environment variables after execution.
 //! The Twitter API integration tests expect missing credentials and verify proper error handling.
 
-use crate::*;
+use crate::{
+    config::{TwitterConfig, get_server_port},
+    oauth::{
+        generate_oauth_signature, percent_encode, generate_nonce, get_current_timestamp,
+        build_oauth_params, build_auth_header,
+    },
+    handlers::{
+        handle_health, handle_reputest_get, handle_reputest_post, handle_root, handle_tweet,
+    },
+};
 use axum::{
     body::Body,
     http::{Request, StatusCode},
+    response::Json,
+    routing::{get, post},
+    Router,
 };
 use http_body_util::BodyExt;
 use serde_json::Value;

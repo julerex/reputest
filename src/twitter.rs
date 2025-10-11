@@ -1,0 +1,102 @@
+//! Twitter/X API integration module.
+//!
+//! This module contains functions for interacting with the Twitter/X API,
+//! including posting tweets using OAuth 1.0a authentication.
+
+use log::{error, info};
+use reqwest::Client;
+use serde_json::json;
+
+use crate::config::TwitterConfig;
+use crate::oauth::{build_auth_header, build_oauth_params, generate_oauth_signature};
+
+/// Posts a tweet to Twitter/X using the API v2 endpoint.
+///
+/// This function handles the complete OAuth 1.0a authentication flow and posts
+/// a tweet to the Twitter/X API. It generates the necessary OAuth signature,
+/// builds the authorization header, and sends the request.
+///
+/// # Parameters
+///
+/// - `text`: The text content of the tweet to post
+///
+/// # Returns
+///
+/// - `Ok(String)`: The API response body on successful tweet posting
+/// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If authentication fails, network error, or API error
+///
+/// # Requirements
+///
+/// The following environment variables must be set:
+/// - `xapi_consumer_key`
+/// - `xapi_consumer_secret`
+/// - `xapi_access_token`
+/// - `xapi_access_token_secret`
+///
+/// # Example
+///
+/// ```rust
+/// use reputest::post_tweet;
+/// 
+/// #[tokio::main]
+/// async fn main() {
+///     let result = post_tweet("Hello from Rust!").await;
+///     match result {
+///         Ok(response) => println!("Tweet posted: {}", response),
+///         Err(e) => eprintln!("Failed to post tweet: {}", e),
+///     }
+/// }
+/// ```
+///
+/// # Errors
+///
+/// This function can fail for several reasons:
+/// - Missing or invalid Twitter API credentials
+/// - Network connectivity issues
+/// - Twitter API rate limiting or other API errors
+/// - Invalid tweet content (too long, etc.)
+pub async fn post_tweet(text: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    // Load Twitter API credentials from environment variables
+    let config = TwitterConfig::from_env()?;
+    let client = Client::new();
+    let url = "https://api.x.com/2/tweets";
+
+    // Create the tweet payload
+    let payload = json!({
+        "text": text
+    });
+
+    // Build OAuth parameters and generate signature
+    let mut oauth_params = build_oauth_params(&config)?;
+    let signature = generate_oauth_signature(
+        "POST",
+        url,
+        &oauth_params,
+        &config.consumer_secret,
+        &config.access_token_secret,
+    );
+    oauth_params.insert("oauth_signature".to_string(), signature);
+
+    // Build the Authorization header with OAuth parameters
+    let auth_header = build_auth_header(&oauth_params);
+
+    // Send the authenticated request to Twitter API
+    let response = client
+        .post(url)
+        .header("Authorization", auth_header)
+        .header("Content-Type", "application/json")
+        .json(&payload)
+        .send()
+        .await?;
+
+    // Handle the API response
+    if response.status().is_success() {
+        let response_text = response.text().await?;
+        info!("Tweet posted successfully: {}", response_text);
+        Ok(response_text)
+    } else {
+        let error_text = response.text().await?;
+        error!("Failed to post tweet: {}", error_text);
+        Err(format!("Twitter API error: {}", error_text).into())
+    }
+}
