@@ -98,6 +98,7 @@ pub async fn start_gmgv_cronjob() -> Result<JobScheduler, Box<dyn std::error::Er
 ///     }
 /// }
 /// ```
+#[allow(dead_code)]
 pub async fn run_gmgv_cronjob() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut sched = start_gmgv_cronjob().await?;
     sched.start().await?;
