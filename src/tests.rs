@@ -23,13 +23,13 @@
 //! The Twitter API integration tests expect missing credentials and verify proper error handling.
 
 use crate::{
-    config::{TwitterConfig, get_server_port},
-    oauth::{
-        generate_oauth_signature, percent_encode, generate_nonce, get_current_timestamp,
-        build_oauth_params, build_auth_header,
-    },
+    config::{get_server_port, TwitterConfig},
     handlers::{
         handle_health, handle_reputest_get, handle_reputest_post, handle_root, handle_tweet,
+    },
+    oauth::{
+        build_auth_header, build_oauth_params, generate_nonce, generate_oauth_signature,
+        get_current_timestamp, percent_encode,
     },
 };
 use axum::{

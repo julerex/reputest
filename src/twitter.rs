@@ -3,9 +3,10 @@
 //! This module contains functions for interacting with the Twitter/X API,
 //! including posting tweets using OAuth 1.0a authentication.
 
-use log::{error, info};
+use log::{error, info, warn};
 use reqwest::Client;
 use serde_json::json;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::config::TwitterConfig;
 use crate::oauth::{build_auth_header, build_oauth_params, generate_oauth_signature};
@@ -37,7 +38,7 @@ use crate::oauth::{build_auth_header, build_oauth_params, generate_oauth_signatu
 ///
 /// ```rust
 /// use reputest::post_tweet;
-/// 
+///
 /// #[tokio::main]
 /// async fn main() {
 ///     let result = post_tweet("Hello from Rust!").await;
@@ -97,6 +98,136 @@ pub async fn post_tweet(text: &str) -> Result<String, Box<dyn std::error::Error 
     } else {
         let error_text = response.text().await?;
         error!("Failed to post tweet: {}", error_text);
+        Err(format!("Twitter API error: {}", error_text).into())
+    }
+}
+
+/// Searches for tweets with a specific hashtag in the past hour.
+///
+/// This function uses the Twitter API v2 search endpoint to find tweets containing
+/// the specified hashtag that were posted within the last hour. It logs all found
+/// tweets to the application logs.
+///
+/// # Parameters
+///
+/// - `hashtag`: The hashtag to search for (without the # symbol)
+///
+/// # Returns
+///
+/// - `Ok(())`: If the search completed successfully (regardless of results)
+/// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If authentication fails, network error, or API error
+///
+/// # Requirements
+///
+/// The following environment variables must be set:
+/// - `xapi_consumer_key`
+/// - `xapi_consumer_secret`
+/// - `xapi_access_token`
+/// - `xapi_access_token_secret`
+///
+/// # Example
+///
+/// ```rust
+/// use reputest::search_tweets_with_hashtag;
+///
+/// #[tokio::main]
+/// async fn main() {
+///     let result = search_tweets_with_hashtag("gmgv").await;
+///     match result {
+///         Ok(_) => println!("Search completed successfully"),
+///         Err(e) => eprintln!("Failed to search tweets: {}", e),
+///     }
+/// }
+/// ```
+///
+/// # Errors
+///
+/// This function can fail for several reasons:
+/// - Missing or invalid Twitter API credentials
+/// - Network connectivity issues
+/// - Twitter API rate limiting or other API errors
+pub async fn search_tweets_with_hashtag(
+    hashtag: &str,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    // Load Twitter API credentials from environment variables
+    let config = TwitterConfig::from_env()?;
+    let client = Client::new();
+
+    // Calculate the timestamp for 1 hour ago
+    let one_hour_ago = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+        - 3600; // 3600 seconds = 1 hour
+
+    // Build the search query with hashtag and time filter
+    let query = format!("#{}", hashtag);
+    let url = format!(
+        "https://api.x.com/2/tweets/search/recent?query={}&start_time={}T00:00:00Z&max_results=100",
+        urlencoding::encode(&query),
+        chrono::DateTime::from_timestamp(one_hour_ago as i64, 0)
+            .unwrap()
+            .format("%Y-%m-%dT%H:%M:%S")
+    );
+
+    // Build OAuth parameters and generate signature
+    let mut oauth_params = build_oauth_params(&config)?;
+    let signature = generate_oauth_signature(
+        "GET",
+        &url,
+        &oauth_params,
+        &config.consumer_secret,
+        &config.access_token_secret,
+    );
+    oauth_params.insert("oauth_signature".to_string(), signature);
+
+    // Build the Authorization header with OAuth parameters
+    let auth_header = build_auth_header(&oauth_params);
+
+    // Send the authenticated request to Twitter API
+    let response = client
+        .get(&url)
+        .header("Authorization", auth_header)
+        .send()
+        .await?;
+
+    // Handle the API response
+    if response.status().is_success() {
+        let response_text = response.text().await?;
+        let json_response: serde_json::Value = serde_json::from_str(&response_text)?;
+
+        // Extract tweets from the response
+        if let Some(data) = json_response.get("data") {
+            if let Some(tweets) = data.as_array() {
+                if tweets.is_empty() {
+                    info!("No tweets found with hashtag #{} in the past hour", hashtag);
+                } else {
+                    info!(
+                        "Found {} tweets with hashtag #{} in the past hour:",
+                        tweets.len(),
+                        hashtag
+                    );
+                    for (i, tweet) in tweets.iter().enumerate() {
+                        if let Some(text) = tweet.get("text") {
+                            if let Some(id) = tweet.get("id") {
+                                info!("Tweet {} (ID: {}): {}", i + 1, id, text);
+                            } else {
+                                info!("Tweet {}: {}", i + 1, text);
+                            }
+                        }
+                    }
+                }
+            } else {
+                warn!("Unexpected response format: data is not an array");
+            }
+        } else {
+            info!("No tweets found with hashtag #{} in the past hour", hashtag);
+        }
+
+        Ok(())
+    } else {
+        let error_text = response.text().await?;
+        error!("Failed to search tweets: {}", error_text);
         Err(format!("Twitter API error: {}", error_text).into())
     }
 }

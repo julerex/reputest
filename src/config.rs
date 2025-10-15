@@ -40,7 +40,7 @@ impl TwitterConfig {
     ///
     /// ```rust
     /// use reputest::TwitterConfig;
-    /// 
+    ///
     /// // Set environment variables before calling
     /// std::env::set_var("xapi_consumer_key", "your_key");
     /// std::env::set_var("xapi_consumer_secret", "your_secret");
@@ -77,7 +77,7 @@ impl TwitterConfig {
 ///
 /// ```rust
 /// use reputest::get_server_port;
-/// 
+///
 /// // With PORT=8080 set in environment
 /// let port = get_server_port(); // Returns 8080
 ///

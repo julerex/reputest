@@ -3,10 +3,7 @@
 //! This module contains all the HTTP route handler functions that process
 //! incoming requests and return appropriate responses.
 
-use axum::{
-    http::StatusCode,
-    response::Json,
-};
+use axum::{http::StatusCode, response::Json};
 use log::{error, info};
 use serde_json::{json, Value};
 

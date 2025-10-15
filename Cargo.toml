@@ -20,7 +20,7 @@ tower = "0.4"
 # HTTP middleware for Tower (CORS, tracing)
 tower-http = { version = "0.5", features = ["cors", "trace"] }
 # Async runtime
-tokio = { version = "1", features = ["rt", "macros", "rt-multi-thread"] }
+tokio = { version = "1", features = ["rt", "macros", "rt-multi-thread", "signal"] }
 # Logging facade
 log = "0.4"
 # Logging implementation that reads from environment variables
@@ -39,6 +39,12 @@ rand = "0.8"
 base64 = "0.21"
 # HMAC implementation for OAuth signature generation
 hmac = "0.12"
+# Cron job scheduler for periodic tasks
+tokio-cron-scheduler = "0.9"
+# URL encoding/decoding
+urlencoding = "2.1"
+# Date and time handling
+chrono = { version = "0.4", features = ["serde"] }
 
 [dev-dependencies]
 # Testing utilities for async code

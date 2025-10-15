@@ -122,7 +122,7 @@ pub fn generate_oauth_signature(
 ///
 /// ```rust
 /// use reputest::percent_encode;
-/// 
+///
 /// assert_eq!(percent_encode("hello world"), "hello%20world");
 /// assert_eq!(percent_encode("test@example.com"), "test%40example.com");
 /// assert_eq!(percent_encode("abc123"), "abc123");
@@ -152,7 +152,7 @@ pub fn percent_encode(s: &str) -> String {
 ///
 /// ```rust
 /// use reputest::generate_nonce;
-/// 
+///
 /// let nonce1 = generate_nonce();
 /// let nonce2 = generate_nonce();
 /// assert_ne!(nonce1, nonce2); // Nonces should be different
@@ -185,7 +185,7 @@ pub fn generate_nonce() -> String {
 ///
 /// ```rust
 /// use reputest::get_current_timestamp;
-/// 
+///
 /// let timestamp = get_current_timestamp().unwrap();
 /// let ts: u64 = timestamp.parse().unwrap();
 /// assert!(ts > 1600000000); // Should be a reasonable timestamp
@@ -225,13 +225,13 @@ pub fn get_current_timestamp() -> Result<String, Box<dyn std::error::Error + Sen
 ///
 /// ```rust
 /// use reputest::{TwitterConfig, build_oauth_params};
-/// 
+///
 /// // Set environment variables for the test
 /// std::env::set_var("xapi_consumer_key", "test_key");
 /// std::env::set_var("xapi_consumer_secret", "test_secret");
 /// std::env::set_var("xapi_access_token", "test_token");
 /// std::env::set_var("xapi_access_token_secret", "test_token_secret");
-/// 
+///
 /// let config = TwitterConfig::from_env().unwrap();
 /// let oauth_params = build_oauth_params(&config).unwrap();
 /// assert!(oauth_params.contains_key("oauth_consumer_key"));
@@ -285,7 +285,7 @@ pub fn build_oauth_params(
 /// ```rust
 /// use reputest::build_auth_header;
 /// use std::collections::BTreeMap;
-/// 
+///
 /// let mut params = BTreeMap::new();
 /// params.insert("oauth_consumer_key".to_string(), "key".to_string());
 /// params.insert("oauth_nonce".to_string(), "nonce".to_string());

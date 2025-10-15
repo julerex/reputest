@@ -38,15 +38,16 @@ use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
 
 mod config;
+mod cronjob;
+mod handlers;
 mod oauth;
 mod twitter;
-mod handlers;
 
 use config::get_server_port;
+use cronjob::start_gmgv_cronjob;
 use handlers::{
     handle_health, handle_reputest_get, handle_reputest_post, handle_root, handle_tweet,
 };
-
 
 /// Main entry point for the reputest web service.
 ///
@@ -98,6 +99,21 @@ async fn main() {
     // Initialize the logging system
     env_logger::init();
 
+    // Start the cronjob scheduler for GMGV hashtag monitoring
+    let cronjob_handle = tokio::spawn(async {
+        match start_gmgv_cronjob().await {
+            Ok(scheduler) => {
+                info!("Starting GMGV hashtag monitoring cronjob");
+                if let Err(e) = scheduler.start().await {
+                    log::error!("Failed to start cronjob scheduler: {}", e);
+                }
+            }
+            Err(e) => {
+                log::error!("Failed to create cronjob scheduler: {}", e);
+            }
+        }
+    });
+
     // Build the HTTP application with all routes and middleware
     let app = Router::new()
         .route("/", get(handle_root))
@@ -115,7 +131,18 @@ async fn main() {
 
     // Bind to the address and start serving requests
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+
+    // Run both the HTTP server and cronjob concurrently
+    tokio::select! {
+        result = axum::serve(listener, app) => {
+            if let Err(e) = result {
+                log::error!("HTTP server error: {}", e);
+            }
+        }
+        _ = cronjob_handle => {
+            log::info!("Cronjob task completed");
+        }
+    }
 }
 
 #[cfg(test)]
