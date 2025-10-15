@@ -106,6 +106,11 @@ async fn main() {
                 info!("Starting GMGV hashtag monitoring cronjob");
                 if let Err(e) = scheduler.start().await {
                     log::error!("Failed to start cronjob scheduler: {}", e);
+                    return;
+                }
+                // Keep the scheduler running indefinitely
+                loop {
+                    tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
                 }
             }
             Err(e) => {
