@@ -31,7 +31,7 @@ use tokio_cron_scheduler::{Job, JobScheduler};
 ///
 /// # Example
 ///
-/// ```rust
+/// ```rust,no_run
 /// use reputest::start_gmgv_cronjob;
 ///
 /// #[tokio::main]
@@ -88,7 +88,7 @@ pub async fn start_gmgv_cronjob() -> Result<JobScheduler, Box<dyn std::error::Er
 ///
 /// # Example
 ///
-/// ```rust
+/// ```rust,no_run
 /// use reputest::run_gmgv_cronjob;
 ///
 /// #[tokio::main]

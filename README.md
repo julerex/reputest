@@ -1,23 +1,63 @@
-# Reputest - Rust Container Service
+# Reputest - Rust Web Service with Twitter/X API Integration
 
-A simple Rust web service that runs on Azure Container Instances and prints "Reputesting!" to the logs. This project uses Docker containerization with warp web server and includes GitHub Actions for CI/CD.
+A modern Rust web service built with Axum that provides HTTP endpoints for testing and demonstration purposes, featuring Twitter/X API integration using OAuth 1.0a authentication and automated hashtag monitoring via cronjobs.
 
 ## Features
 
-- 🦀 Rust-based web service containerized with Docker
-- 🌐 Warp web server for HTTP handling
-- 📝 Logs "Reputesting!" message
-- 🚀 GitHub Actions CI/CD pipeline
-- ☁️ Azure Container Instances deployment ready
-- 🔧 Local development support
-- 🐳 Multi-stage Docker build for optimized image size
+- 🦀 **Rust-based web service** with Axum framework for high performance
+- 🐦 **Twitter/X API integration** with OAuth 1.0a authentication
+- 📅 **Automated cronjob scheduling** for hashtag monitoring (GMGV hashtag every 10 minutes)
+- 🌐 **Multiple HTTP endpoints** for testing and health monitoring
+- 📝 **Structured logging** with configurable log levels
+- 🐳 **Docker containerization** with multi-stage builds for optimized images
+- ☁️ **Multi-platform deployment** support (Azure Container Instances, Fly.io)
+- 🔧 **Comprehensive test suite** with async testing utilities
+- 🚀 **Production-ready** with optimized release builds
 
 ## Prerequisites
 
 - [Rust](https://rustup.rs/) (latest stable version)
 - [Docker](https://docs.docker.com/get-docker/) (for containerization)
-- [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli) (for deployment)
-- [Azure Container Registry](https://docs.microsoft.com/en-us/azure/container-registry/) (for storing container images)
+- Twitter/X API credentials (for Twitter functionality)
+- [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli) (for Azure deployment)
+- [Fly CLI](https://fly.io/docs/hands-on/install-flyctl/) (for Fly.io deployment)
+
+## Environment Variables
+
+The following environment variables are required for full functionality:
+
+### Required for Twitter/X API Integration
+- `xapi_consumer_key`: Twitter API consumer key
+- `xapi_consumer_secret`: Twitter API consumer secret  
+- `xapi_access_token`: Twitter API access token
+- `xapi_access_token_secret`: Twitter API access token secret
+
+### Optional Configuration
+- `PORT`: Server port (defaults to 3000)
+- `RUST_LOG`: Log level (defaults to info)
+
+## API Endpoints
+
+| Method | Endpoint | Description | Response |
+|--------|----------|-------------|----------|
+| `GET` | `/` | Welcome message | `"A new reputest is in the house!"` |
+| `GET` | `/reputest` | Test endpoint | `"Reputesting!"` |
+| `POST` | `/reputest` | Test endpoint | `"Reputesting!"` |
+| `GET` | `/health` | Health check | `{"status": "healthy", "service": "reputest"}` |
+| `POST` | `/tweet` | Post tweet to Twitter/X | Tweet response or error |
+
+### Example API Usage
+
+```bash
+# Test the service
+curl http://localhost:3000/reputest
+
+# Check health
+curl http://localhost:3000/health
+
+# Post a tweet (requires Twitter API credentials)
+curl -X POST http://localhost:3000/tweet
+```
 
 ## Local Development
 
@@ -28,208 +68,259 @@ git clone <your-repo-url>
 cd reputest
 ```
 
-### 2. Build and Run Locally
+### 2. Configure Environment Variables
 
-#### Build the Rust project
+Create a `.env` file or set environment variables:
+
+```bash
+# Required for Twitter functionality
+export xapi_consumer_key="your_consumer_key"
+export xapi_consumer_secret="your_consumer_secret"
+export xapi_access_token="your_access_token"
+export xapi_access_token_secret="your_access_token_secret"
+
+# Optional
+export PORT=3000
+export RUST_LOG=info
+```
+
+### 3. Build and Run
+
+#### Using Cargo (Development)
 
 ```bash
 # Build the project
-cargo build --release
+cargo build
 
-# Run the application locally
-cargo run
+# Run with debug logging
+RUST_LOG=debug cargo run
+
+# Run tests
+cargo test
+
+# Run with specific port
+PORT=8080 cargo run
 ```
 
-The service will be available at `http://localhost:3000`
-
-#### Build and run with Docker
+#### Using Docker
 
 ```bash
 # Build the Docker image
 docker build -t reputest .
 
 # Run the container
-docker run -p 3000:3000 reputest
+docker run -p 3000:3000 \
+  -e xapi_consumer_key="your_key" \
+  -e xapi_consumer_secret="your_secret" \
+  -e xapi_access_token="your_token" \
+  -e xapi_access_token_secret="your_token_secret" \
+  reputest
 ```
 
-### 3. Test the Service
+## Deployment
+
+### Fly.io Deployment
+
+The project includes Fly.io configuration for easy deployment:
 
 ```bash
-# Test the main endpoint
-curl http://localhost:3000/reputest
+# Install Fly CLI
+curl -L https://fly.io/install.sh | sh
 
-# Test the health check endpoint
-curl http://localhost:3000/health
+# Login to Fly.io
+fly auth login
 
-# Test the root endpoint
-curl http://localhost:3000/
+# Deploy (first time)
+fly launch
 
-# Or visit in your browser
-open http://localhost:3000/reputest
+# Deploy updates
+fly deploy
+
+# Set environment variables
+fly secrets set xapi_consumer_key="your_key"
+fly secrets set xapi_consumer_secret="your_secret"
+fly secrets set xapi_access_token="your_token"
+fly secrets set xapi_access_token_secret="your_token_secret"
 ```
 
-## Deployment to Azure
+### Azure Container Instances
 
-### 1. Create Azure Resources
+The project includes comprehensive Azure deployment support via Makefile:
 
 ```bash
-# Login to Azure
-az login
+# Setup Azure resources
+make azure-setup
 
-# Create a resource group
+# Deploy to Azure
+make prod-deploy
+
+# View logs
+make azure-logs
+
+# Get service URL
+make azure-get-url-container
+```
+
+#### Manual Azure Deployment
+
+```bash
+# Create resource group
 az group create --name reputest-rg --location eastus
 
-# Create an Azure Container Registry
-az acr create \
+# Create container registry
+az acr create --resource-group reputest-rg --name yourregistry --sku Basic --admin-enabled true
+
+# Build and push image
+docker build -t yourregistry.azurecr.io/reputest:latest .
+az acr login --name yourregistry
+docker push yourregistry.azurecr.io/reputest:latest
+
+# Deploy container instance
+az container create \
   --resource-group reputest-rg \
-  --name yourregistry \
-  --sku Basic \
-  --admin-enabled true
-
-# Get the ACR login server and credentials
-az acr show --name yourregistry --query loginServer --output tsv
-az acr credential show --name yourregistry --query passwords[0].value --output tsv
+  --name reputest-container \
+  --image yourregistry.azurecr.io/reputest:latest \
+  --registry-login-server yourregistry.azurecr.io \
+  --registry-username $(az acr credential show --name yourregistry --query username --output tsv) \
+  --registry-password $(az acr credential show --name yourregistry --query passwords[0].value --output tsv) \
+  --dns-name-label reputest-aci \
+  --ports 3000 \
+  --environment-variables RUST_LOG=info PORT=3000
 ```
-
-### 2. Configure GitHub Secrets
-
-Add these secrets to your GitHub repository:
-
-- `AZURE_CREDENTIALS`: Azure service principal credentials
-- `ACR_USERNAME`: Azure Container Registry username (usually the registry name)
-- `ACR_PASSWORD`: Azure Container Registry password
-
-To get the credentials:
-
-```bash
-# Create service principal
-az ad sp create-for-rbac --name "reputest-app" --role contributor \
-  --scopes /subscriptions/{subscription-id}/resourceGroups/reputest-rg \
-  --sdk-auth
-
-# Get ACR credentials
-az acr credential show --name yourregistry --query username --output tsv
-az acr credential show --name yourregistry --query passwords[0].value --output tsv
-```
-
-### 3. Update Configuration
-
-1. Update `AZURE_CONTAINER_REGISTRY` in `.github/workflows/ci-cd.yml` with your ACR login server
-2. Update `RESOURCE_GROUP` and `CONTAINER_GROUP_NAME` in the workflow if needed
-
-### 4. Deploy
-
-Push to the `main` branch to trigger automatic deployment:
-
-```bash
-git add .
-git commit -m "Initial commit"
-git push origin main
-```
-
-After deployment, your service will be available at:
-`http://reputest-aci.eastus.azurecontainer.io:3000/reputest`
 
 ## Project Structure
 
 ```
 reputest/
 ├── src/
-│   └── main.rs              # Main Rust web service with warp server
-├── .github/
-│   └── workflows/
-│       └── ci-cd.yml        # GitHub Actions workflow for ACI deployment
-├── Cargo.toml               # Rust dependencies (warp, tokio)
+│   ├── main.rs              # Main application entry point
+│   ├── config.rs            # Configuration and environment handling
+│   ├── handlers.rs          # HTTP route handlers
+│   ├── twitter.rs           # Twitter/X API integration
+│   ├── oauth.rs             # OAuth 1.0a authentication implementation
+│   ├── cronjob.rs           # Scheduled task management
+│   └── tests.rs             # Comprehensive test suite
+├── Cargo.toml               # Rust dependencies and project metadata
 ├── Dockerfile               # Multi-stage Docker build configuration
-├── aci-deployment.json      # Azure Container Instance deployment template
-├── azure-pipelines.yml      # Azure DevOps pipeline (alternative)
+├── fly.toml                 # Fly.io deployment configuration
+├── Makefile                 # Azure deployment automation
+├── magiconfig.env           # Environment configuration template
 └── README.md               # This file
 ```
 
-## CI/CD Pipeline
+## Key Components
 
-The GitHub Actions workflow includes:
+### Twitter/X API Integration
 
-- ✅ Rust toolchain setup
-- 📦 Cargo caching for faster builds
-- 🧪 Running tests
-- 🔍 Clippy linting
-- 📝 Rustfmt formatting check
-- 🐳 Docker image building and pushing to Azure Container Registry
-- 🚀 Automatic deployment to Azure Container Instances
+The service includes full OAuth 1.0a implementation for Twitter/X API:
 
-## Customization
+- **Authentication**: Complete OAuth 1.0a flow with HMAC-SHA1 signatures
+- **Tweet Posting**: Post tweets via the `/tweet` endpoint
+- **Hashtag Monitoring**: Automated search for tweets with specific hashtags
+- **Rate Limiting**: Proper handling of API rate limits and errors
 
-### Changing the Message
+### Cronjob System
 
-Edit `src/main.rs` to change the logged message:
+Automated hashtag monitoring runs every 10 minutes:
 
-```rust
-info!("Your custom message here!");
+- **GMGV Hashtag**: Searches for tweets containing #gmgv from the past hour
+- **Logging**: All found tweets are logged with timestamps and IDs
+- **Error Handling**: Graceful handling of API errors and network issues
+- **Configurable**: Easy to modify schedule and hashtag via code
+
+### HTTP Server
+
+Built with Axum for high performance:
+
+- **Async/Await**: Full async support for concurrent request handling
+- **Middleware**: Request tracing and logging middleware
+- **Error Handling**: Comprehensive error responses with proper HTTP status codes
+- **Health Checks**: Built-in health monitoring endpoint
+
+## Development
+
+### Running Tests
+
+```bash
+# Run all tests
+cargo test
+
+# Run tests with output
+cargo test -- --nocapture
+
+# Run specific test module
+cargo test handlers
 ```
 
-### Adding More Endpoints
+### Code Quality
 
-1. Add new routes to the warp server in `src/main.rs`
-2. Update the Dockerfile if additional dependencies are needed
-3. Test locally with `cargo run` or `docker run`
+The project includes comprehensive documentation and follows Rust best practices:
 
-### How Container Deployment Works
+- **Documentation**: All public functions include detailed rustdoc comments
+- **Error Handling**: Proper error propagation with custom error types
+- **Testing**: Unit tests for all major functionality
+- **Performance**: Optimized release builds with size optimization
 
-This project uses Azure Container Instances, which provides a simple way to run containers in Azure without managing virtual machines. Key points:
+### Adding New Features
 
-- The `Dockerfile` creates a multi-stage build for optimized image size
-- The container runs as a non-root user for security
-- Environment variables control logging and port configuration
-- Azure Container Registry stores the built images
-- GitHub Actions automatically builds and deploys on code changes
+1. **New Endpoints**: Add handlers in `src/handlers.rs` and register routes in `main.rs`
+2. **Twitter Integration**: Extend `src/twitter.rs` with new API endpoints
+3. **Scheduled Tasks**: Add new cronjobs in `src/cronjob.rs`
+4. **Configuration**: Add new environment variables in `src/config.rs`
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **Build fails**: Ensure you have the latest Rust toolchain and Docker installed
-2. **Deployment fails**: Check Azure credentials and container registry configuration
-3. **Container not responding**: Verify the container is running and port 3000 is accessible
+1. **Twitter API Errors**: Verify all four environment variables are set correctly
+2. **Port Conflicts**: Change the `PORT` environment variable if 3000 is in use
+3. **Docker Build Fails**: Ensure Docker is running and you have sufficient disk space
+4. **Deployment Issues**: Check cloud provider credentials and resource limits
 
 ### Logs
 
-View container logs in the Azure portal or using Azure CLI:
+View application logs:
 
 ```bash
+# Local development
+RUST_LOG=debug cargo run
+
+# Docker
+docker logs <container_id>
+
+# Fly.io
+fly logs
+
+# Azure
 az container logs --name reputest-container --resource-group reputest-rg
 ```
 
-### Manual Deployment
+### Performance
 
-You can also deploy manually using the Azure CLI:
+The service is optimized for production:
 
-```bash
-# Build and push the image manually
-docker build -t yourregistry.azurecr.io/reputest:latest .
-docker push yourregistry.azurecr.io/reputest:latest
-
-# Deploy to Azure Container Instances
-az container create \
-  --resource-group reputest-rg \
-  --name reputest-container \
-  --image yourregistry.azurecr.io/reputest:latest \
-  --registry-login-server yourregistry.azurecr.io \
-  --registry-username yourregistry \
-  --registry-password yourpassword \
-  --dns-name-label reputest-aci \
-  --ports 3000 \
-  --environment-variables RUST_LOG=info PORT=3000
-```
+- **Release Builds**: Uses `opt-level = "z"` for smallest binary size
+- **Link Time Optimization**: Enabled for better performance
+- **Single Codegen Unit**: Optimized compilation
+- **Panic Abort**: Smaller binary size in production
 
 ## Contributing
 
 1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run tests and linting
-5. Submit a pull request
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Make your changes with proper documentation
+4. Run tests (`cargo test`)
+5. Commit your changes (`git commit -m 'Add amazing feature'`)
+6. Push to the branch (`git push origin feature/amazing-feature`)
+7. Open a Pull Request
 
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+- Built with [Axum](https://github.com/tokio-rs/axum) web framework
+- Twitter/X API integration using OAuth 1.0a
+- Docker multi-stage builds for optimized containers
+- Fly.io and Azure Container Instances for deployment
