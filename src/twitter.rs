@@ -149,6 +149,12 @@ pub async fn post_tweet(text: &str) -> Result<String, Box<dyn std::error::Error 
 pub async fn search_tweets_with_hashtag(
     hashtag: &str,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    // Post a tweet with "loggerman"
+    match post_tweet("loggerman").await {
+        Ok(response) => info!("Posted 'loggerman' tweet successfully: {}", response),
+        Err(e) => error!("Failed to post 'loggerman' tweet: {}", e),
+    }
+
     // Load Twitter API credentials from environment variables
     let config = TwitterConfig::from_env()?;
     let client = Client::new();
