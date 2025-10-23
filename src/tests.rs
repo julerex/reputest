@@ -228,12 +228,6 @@ async fn test_tweet_endpoint_without_credentials() {
         .contains("Failed to post tweet"));
 }
 
-
-
-
-
-
-
 /// Unit test for the TwitterConfig::from_env function.
 ///
 /// This test verifies that the configuration loading function:
