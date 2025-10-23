@@ -1,7 +1,7 @@
 //! Twitter/X API integration module.
 //!
 //! This module contains functions for interacting with the Twitter/X API,
-//! including posting tweets using OAuth 1.0a authentication.
+//! including posting tweets using OAuth 2.0 Bearer token authentication.
 
 use log::{error, info, warn};
 use reqwest::Client;
@@ -9,13 +9,13 @@ use serde_json::json;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::config::TwitterConfig;
-use crate::oauth::{build_auth_header, build_oauth_params, generate_oauth_signature};
+use crate::oauth::build_bearer_auth_header;
 
 /// Posts a tweet to Twitter/X using the API v2 endpoint.
 ///
-/// This function handles the complete OAuth 1.0a authentication flow and posts
-/// a tweet to the Twitter/X API. It generates the necessary OAuth signature,
-/// builds the authorization header, and sends the request.
+/// This function uses OAuth 2.0 Bearer Token authentication to post a tweet
+/// to the Twitter/X API v2 endpoint. It builds the proper authorization header
+/// and sends the request with the tweet content.
 ///
 /// # Parameters
 ///
@@ -29,10 +29,7 @@ use crate::oauth::{build_auth_header, build_oauth_params, generate_oauth_signatu
 /// # Requirements
 ///
 /// The following environment variables must be set:
-/// - `xapi_consumer_key`
-/// - `xapi_consumer_secret`
-/// - `xapi_access_token`
-/// - `xapi_access_token_secret`
+/// - `xapi_bearer_token` (OAuth 2.0 Bearer Token for v2 endpoints)
 ///
 /// # Example
 ///
@@ -67,19 +64,8 @@ pub async fn post_tweet(text: &str) -> Result<String, Box<dyn std::error::Error 
         "text": text
     });
 
-    // Build OAuth parameters and generate signature
-    let mut oauth_params = build_oauth_params(&config)?;
-    let signature = generate_oauth_signature(
-        "POST",
-        url,
-        &oauth_params,
-        &config.consumer_secret,
-        &config.access_token_secret,
-    );
-    oauth_params.insert("oauth_signature".to_string(), signature);
-
-    // Build the Authorization header with OAuth parameters
-    let auth_header = build_auth_header(&oauth_params);
+    // Build the Authorization header with Bearer Token (OAuth 2.0)
+    let auth_header = build_bearer_auth_header(&config.bearer_token);
 
     // Send the authenticated request to Twitter API
     let response = client
@@ -105,7 +91,8 @@ pub async fn post_tweet(text: &str) -> Result<String, Box<dyn std::error::Error 
 /// Searches for tweets with a specific hashtag in the past hour.
 ///
 /// This function uses the Twitter API v2 search endpoint to find tweets containing
-/// the specified hashtag that were posted within the last hour. It logs all found
+/// the specified hashtag that were posted within the last hour. It uses OAuth 2.0
+/// Bearer Token authentication as required by v2 endpoints. It logs all found
 /// tweets to the application logs.
 ///
 /// # Parameters
@@ -120,10 +107,7 @@ pub async fn post_tweet(text: &str) -> Result<String, Box<dyn std::error::Error 
 /// # Requirements
 ///
 /// The following environment variables must be set:
-/// - `xapi_consumer_key`
-/// - `xapi_consumer_secret`
-/// - `xapi_access_token`
-/// - `xapi_access_token_secret`
+/// - `xapi_bearer_token` (OAuth 2.0 Bearer Token for v2 endpoints)
 ///
 /// # Example
 ///
@@ -168,27 +152,17 @@ pub async fn search_tweets_with_hashtag(
 
     // Build the search query with hashtag and time filter
     let query = format!("#{}", hashtag);
+    let start_time = chrono::DateTime::from_timestamp(one_hour_ago as i64, 0)
+        .unwrap()
+        .format("%Y-%m-%dT%H:%M:%S.000Z");
     let url = format!(
-        "https://api.x.com/2/tweets/search/recent?query={}&start_time={}T00:00:00Z&max_results=100",
+        "https://api.x.com/2/tweets/search/recent?query={}&start_time={}&max_results=100",
         urlencoding::encode(&query),
-        chrono::DateTime::from_timestamp(one_hour_ago as i64, 0)
-            .unwrap()
-            .format("%Y-%m-%dT%H:%M:%S")
+        start_time
     );
 
-    // Build OAuth parameters and generate signature
-    let mut oauth_params = build_oauth_params(&config)?;
-    let signature = generate_oauth_signature(
-        "GET",
-        &url,
-        &oauth_params,
-        &config.consumer_secret,
-        &config.access_token_secret,
-    );
-    oauth_params.insert("oauth_signature".to_string(), signature);
-
-    // Build the Authorization header with OAuth parameters
-    let auth_header = build_auth_header(&oauth_params);
+    // Build the Authorization header with Bearer Token (OAuth 2.0)
+    let auth_header = build_bearer_auth_header(&config.bearer_token);
 
     // Send the authenticated request to Twitter API
     let response = client

@@ -3,13 +3,13 @@ name = "reputest"
 version = "0.1.0"
 edition = "2021"
 authors = ["Your Name <your.email@example.com>"]
-description = "A Rust web service that provides HTTP endpoints for testing and demonstration purposes, with Twitter/X API integration using OAuth 1.0a authentication"
+description = "A Rust web service that provides HTTP endpoints for testing and demonstration purposes, with Twitter/X API integration using OAuth 2.0 Bearer token authentication"
 license = "MIT"
 repository = "https://github.com/yourusername/reputest"
 homepage = "https://github.com/yourusername/reputest"
 documentation = "https://docs.rs/reputest"
 readme = "README.md"
-keywords = ["web", "api", "twitter", "oauth", "axum", "rust"]
+keywords = ["web", "api", "twitter", "oauth2", "bearer-token", "axum", "rust"]
 categories = ["web-programming", "api-bindings"]
 
 [dependencies]
@@ -31,14 +31,6 @@ serde_json = "1.0"
 reqwest = { version = "0.11", features = ["json"] }
 # Serialization framework
 serde = { version = "1.0", features = ["derive"] }
-# SHA-1 hashing for OAuth signature generation
-sha1 = "0.10"
-# Random number generation for OAuth nonces
-rand = "0.8"
-# Base64 encoding/decoding for OAuth signatures
-base64 = "0.21"
-# HMAC implementation for OAuth signature generation
-hmac = "0.12"
 # Cron job scheduler for periodic tasks
 tokio-cron-scheduler = "0.9"
 # URL encoding/decoding

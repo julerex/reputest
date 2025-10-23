@@ -1,11 +1,11 @@
 # Reputest - Rust Web Service with Twitter/X API Integration
 
-A modern Rust web service built with Axum that provides HTTP endpoints for testing and demonstration purposes, featuring Twitter/X API integration using OAuth 1.0a authentication and automated hashtag monitoring via cronjobs.
+A modern Rust web service built with Axum that provides HTTP endpoints for testing and demonstration purposes, featuring Twitter/X API integration using OAuth 2.0 Bearer token authentication and automated hashtag monitoring via cronjobs.
 
 ## Features
 
 - 🦀 **Rust-based web service** with Axum framework for high performance
-- 🐦 **Twitter/X API integration** with OAuth 1.0a authentication
+- 🐦 **Twitter/X API integration** with OAuth 2.0 Bearer token authentication
 - 📅 **Automated cronjob scheduling** for hashtag monitoring (GMGV hashtag every 10 minutes)
 - 🌐 **Multiple HTTP endpoints** for testing and health monitoring
 - 📝 **Structured logging** with configurable log levels
@@ -27,10 +27,7 @@ The following environment variables are required for full functionality:
 
 ### Required for Twitter/X API Integration
 
-- `xapi_consumer_key`: Twitter API consumer key
-- `xapi_consumer_secret`: Twitter API consumer secret  
-- `xapi_access_token`: Twitter API access token
-- `xapi_access_token_secret`: Twitter API access token secret
+- `xapi_bearer_token`: Twitter API Bearer token (OAuth 2.0 for v2 endpoints)
 
 ### Optional Configuration
 
@@ -56,7 +53,7 @@ curl http://localhost:3000/reputest
 # Check health
 curl http://localhost:3000/health
 
-# Post a tweet (requires Twitter API credentials)
+# Post a tweet (requires Twitter API Bearer token)
 curl -X POST http://localhost:3000/tweet
 ```
 
@@ -75,10 +72,7 @@ Create a `.env` file or set environment variables:
 
 ```bash
 # Required for Twitter functionality
-export xapi_consumer_key="your_consumer_key"
-export xapi_consumer_secret="your_consumer_secret"
-export xapi_access_token="your_access_token"
-export xapi_access_token_secret="your_access_token_secret"
+export xapi_bearer_token="your_bearer_token"
 
 # Optional
 export PORT=3000
@@ -111,10 +105,7 @@ docker build -t reputest .
 
 # Run the container
 docker run -p 3000:3000 \
-  -e xapi_consumer_key="your_key" \
-  -e xapi_consumer_secret="your_secret" \
-  -e xapi_access_token="your_token" \
-  -e xapi_access_token_secret="your_token_secret" \
+  -e xapi_bearer_token="your_bearer_token" \
   reputest
 ```
 
@@ -138,10 +129,7 @@ fly launch
 fly deploy
 
 # Set environment variables
-fly secrets set xapi_consumer_key="your_key"
-fly secrets set xapi_consumer_secret="your_secret"
-fly secrets set xapi_access_token="your_token"
-fly secrets set xapi_access_token_secret="your_token_secret"
+fly secrets set xapi_bearer_token="your_bearer_token"
 ```
 
 ## Project Structure
@@ -153,7 +141,7 @@ reputest/
 │   ├── config.rs            # Configuration and environment handling
 │   ├── handlers.rs          # HTTP route handlers
 │   ├── twitter.rs           # Twitter/X API integration
-│   ├── oauth.rs             # OAuth 1.0a authentication implementation
+│   ├── oauth.rs             # OAuth 2.0 Bearer token authentication implementation
 │   ├── cronjob.rs           # Scheduled task management
 │   └── tests.rs             # Comprehensive test suite
 ├── Cargo.toml               # Rust dependencies and project metadata
@@ -168,11 +156,11 @@ reputest/
 
 ### Twitter/X API Integration
 
-The service includes full OAuth 1.0a implementation for Twitter/X API:
+The service includes OAuth 2.0 Bearer token authentication for Twitter/X API v2:
 
-- **Authentication**: Complete OAuth 1.0a flow with HMAC-SHA1 signatures
-- **Tweet Posting**: Post tweets via the `/tweet` endpoint
-- **Hashtag Monitoring**: Automated search for tweets with specific hashtags
+- **Authentication**: OAuth 2.0 Bearer token authentication for v2 endpoints
+- **Tweet Posting**: Post tweets via the `/tweet` endpoint using v2 API
+- **Hashtag Monitoring**: Automated search for tweets with specific hashtags using v2 search API
 - **Rate Limiting**: Proper handling of API rate limits and errors
 
 ### Cronjob System
@@ -228,7 +216,7 @@ The project includes comprehensive documentation and follows Rust best practices
 
 ### Common Issues
 
-1. **Twitter API Errors**: Verify all four environment variables are set correctly
+1. **Twitter API Errors**: Verify the Bearer token environment variable is set correctly
 2. **Port Conflicts**: Change the `PORT` environment variable if 3000 is in use
 3. **Docker Build Fails**: Ensure Docker is running and you have sufficient disk space
 4. **Deployment Issues**: Check cloud provider credentials and resource limits
@@ -275,6 +263,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Acknowledgments
 
 - Built with [Axum](https://github.com/tokio-rs/axum) web framework
-- Twitter/X API integration using OAuth 1.0a
+- Twitter/X API integration using OAuth 2.0 Bearer token authentication
 - Docker multi-stage builds for optimized containers
 - Fly.io for deployment

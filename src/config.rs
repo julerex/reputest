@@ -7,18 +7,12 @@ use std::env;
 
 /// Configuration struct for Twitter/X API credentials.
 ///
-/// This struct holds all the necessary OAuth 1.0a credentials required to authenticate
-/// with the Twitter/X API. All fields are loaded from environment variables.
+/// This struct holds the Bearer Token required to authenticate with the Twitter/X API v2 endpoints.
+/// The Bearer Token is loaded from environment variables.
 #[derive(Debug)]
 pub struct TwitterConfig {
-    /// The consumer key (API key) from the Twitter Developer Portal
-    pub consumer_key: String,
-    /// The consumer secret from the Twitter Developer Portal
-    pub consumer_secret: String,
-    /// The access token for the authenticated user
-    pub access_token: String,
-    /// The access token secret for the authenticated user
-    pub access_token_secret: String,
+    /// The Bearer Token for OAuth 2.0 authentication (v2 endpoints)
+    pub bearer_token: String,
 }
 
 impl TwitterConfig {
@@ -26,10 +20,7 @@ impl TwitterConfig {
     ///
     /// # Required Environment Variables
     ///
-    /// - `xapi_consumer_key`: Twitter API consumer key
-    /// - `xapi_consumer_secret`: Twitter API consumer secret
-    /// - `xapi_access_token`: Twitter API access token
-    /// - `xapi_access_token_secret`: Twitter API access token secret
+    /// - `xapi_bearer_token`: Twitter API Bearer Token (OAuth 2.0 for v2 endpoints)
     ///
     /// # Returns
     ///
@@ -42,19 +33,13 @@ impl TwitterConfig {
     /// use reputest::TwitterConfig;
     ///
     /// // Set environment variables before calling
-    /// std::env::set_var("xapi_consumer_key", "your_key");
-    /// std::env::set_var("xapi_consumer_secret", "your_secret");
-    /// std::env::set_var("xapi_access_token", "your_token");
-    /// std::env::set_var("xapi_access_token_secret", "your_token_secret");
+    /// std::env::set_var("xapi_bearer_token", "your_bearer_token");
     ///
     /// let config = TwitterConfig::from_env().unwrap();
     /// ```
     pub fn from_env() -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         Ok(TwitterConfig {
-            consumer_key: env::var("xapi_consumer_key")?,
-            consumer_secret: env::var("xapi_consumer_secret")?,
-            access_token: env::var("xapi_access_token")?,
-            access_token_secret: env::var("xapi_access_token_secret")?,
+            bearer_token: env::var("xapi_bearer_token")?,
         })
     }
 }

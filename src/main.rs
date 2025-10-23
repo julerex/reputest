@@ -1,12 +1,12 @@
 //! # Reputest
 //!
 //! A Rust web service that provides HTTP endpoints for testing and demonstration purposes.
-//! The service includes functionality to post tweets via the Twitter/X API using OAuth 1.0a authentication.
+//! The service includes functionality to post tweets via the Twitter/X API using OAuth 2.0 Bearer token authentication.
 //!
 //! ## Features
 //!
 //! - HTTP server with multiple endpoints (`/`, `/reputest`, `/health`, `/tweet`)
-//! - Twitter/X API integration with OAuth 1.0a authentication
+//! - Twitter/X API integration with OAuth 2.0 Bearer token authentication
 //! - Comprehensive test suite
 //! - Structured logging
 //! - Health check endpoint
@@ -14,10 +14,7 @@
 //! ## Environment Variables
 //!
 //! The following environment variables are required for Twitter API functionality:
-//! - `xapi_consumer_key`: Twitter API consumer key
-//! - `xapi_consumer_secret`: Twitter API consumer secret  
-//! - `xapi_access_token`: Twitter API access token
-//! - `xapi_access_token_secret`: Twitter API access token secret
+//! - `xapi_bearer_token`: Twitter API Bearer token (OAuth 2.0 for v2 endpoints)
 //! - `PORT`: Server port (defaults to 3000)
 //!
 //! ## API Endpoints
