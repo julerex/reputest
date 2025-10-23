@@ -10,7 +10,7 @@ A modern Rust web service built with Axum that provides HTTP endpoints for testi
 - 🌐 **Multiple HTTP endpoints** for testing and health monitoring
 - 📝 **Structured logging** with configurable log levels
 - 🐳 **Docker containerization** with multi-stage builds for optimized images
-- ☁️ **Multi-platform deployment** support (Azure Container Instances, Fly.io)
+- ☁️ **Multi-platform deployment** support (Fly.io)
 - 🔧 **Comprehensive test suite** with async testing utilities
 - 🚀 **Production-ready** with optimized release builds
 
@@ -19,7 +19,6 @@ A modern Rust web service built with Axum that provides HTTP endpoints for testi
 - [Rust](https://rustup.rs/) (latest stable version)
 - [Docker](https://docs.docker.com/get-docker/) (for containerization)
 - Twitter/X API credentials (for Twitter functionality)
-- [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli) (for Azure deployment)
 - [Fly CLI](https://fly.io/docs/hands-on/install-flyctl/) (for Fly.io deployment)
 
 ## Environment Variables
@@ -27,12 +26,14 @@ A modern Rust web service built with Axum that provides HTTP endpoints for testi
 The following environment variables are required for full functionality:
 
 ### Required for Twitter/X API Integration
+
 - `xapi_consumer_key`: Twitter API consumer key
 - `xapi_consumer_secret`: Twitter API consumer secret  
 - `xapi_access_token`: Twitter API access token
 - `xapi_access_token_secret`: Twitter API access token secret
 
 ### Optional Configuration
+
 - `PORT`: Server port (defaults to 3000)
 - `RUST_LOG`: Log level (defaults to info)
 
@@ -143,54 +144,9 @@ fly secrets set xapi_access_token="your_token"
 fly secrets set xapi_access_token_secret="your_token_secret"
 ```
 
-### Azure Container Instances
-
-The project includes comprehensive Azure deployment support via Makefile:
-
-```bash
-# Setup Azure resources
-make azure-setup
-
-# Deploy to Azure
-make prod-deploy
-
-# View logs
-make azure-logs
-
-# Get service URL
-make azure-get-url-container
-```
-
-#### Manual Azure Deployment
-
-```bash
-# Create resource group
-az group create --name reputest-rg --location eastus
-
-# Create container registry
-az acr create --resource-group reputest-rg --name yourregistry --sku Basic --admin-enabled true
-
-# Build and push image
-docker build -t yourregistry.azurecr.io/reputest:latest .
-az acr login --name yourregistry
-docker push yourregistry.azurecr.io/reputest:latest
-
-# Deploy container instance
-az container create \
-  --resource-group reputest-rg \
-  --name reputest-container \
-  --image yourregistry.azurecr.io/reputest:latest \
-  --registry-login-server yourregistry.azurecr.io \
-  --registry-username $(az acr credential show --name yourregistry --query username --output tsv) \
-  --registry-password $(az acr credential show --name yourregistry --query passwords[0].value --output tsv) \
-  --dns-name-label reputest-aci \
-  --ports 3000 \
-  --environment-variables RUST_LOG=info PORT=3000
-```
-
 ## Project Structure
 
-```
+```text
 reputest/
 ├── src/
 │   ├── main.rs              # Main application entry point
@@ -203,7 +159,7 @@ reputest/
 ├── Cargo.toml               # Rust dependencies and project metadata
 ├── Dockerfile               # Multi-stage Docker build configuration
 ├── fly.toml                 # Fly.io deployment configuration
-├── Makefile                 # Azure deployment automation
+├── Makefile                 # Build and deployment automation
 ├── magiconfig.env           # Environment configuration template
 └── README.md               # This file
 ```
@@ -291,8 +247,6 @@ docker logs <container_id>
 # Fly.io
 fly logs
 
-# Azure
-az container logs --name reputest-container --resource-group reputest-rg
 ```
 
 ### Performance
@@ -323,4 +277,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Built with [Axum](https://github.com/tokio-rs/axum) web framework
 - Twitter/X API integration using OAuth 1.0a
 - Docker multi-stage builds for optimized containers
-- Fly.io and Azure Container Instances for deployment
+- Fly.io for deployment
