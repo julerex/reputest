@@ -14,7 +14,7 @@
 //! ## Environment Variables
 //!
 //! The following environment variables are required for Twitter API functionality:
-//! - `xapi_bearer_token`: Twitter API Bearer token (OAuth 2.0 for v2 endpoints)
+//! - `xapi_access_token`: Twitter API Access token (OAuth 2.0 User Context for v2 endpoints)
 //! - `PORT`: Server port (defaults to 3000)
 //!
 //! ## API Endpoints

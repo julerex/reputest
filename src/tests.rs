@@ -231,26 +231,26 @@ async fn test_tweet_endpoint_without_credentials() {
 /// Unit test for the TwitterConfig::from_env function.
 ///
 /// This test verifies that the configuration loading function:
-/// - Returns an error when required Bearer token environment variable is missing
-/// - Successfully loads configuration when Bearer token is present
-/// - Correctly maps environment variables to struct fields
-/// - Properly cleans up environment variables after testing
+/// - Returns an error when required environment variable is missing
+/// - Successfully loads configuration when the required variable is present
+/// - Correctly maps environment variable to struct field
+/// - Properly cleans up environment variable after testing
 #[test]
 fn test_twitter_config_from_env() {
-    // Test with missing environment variables
-    std::env::remove_var("xapi_bearer_token");
+    // Test with missing environment variable
+    std::env::remove_var("xapi_access_token");
 
     let result = TwitterConfig::from_env();
     assert!(result.is_err());
 
-    // Test with all environment variables set
-    std::env::set_var("xapi_bearer_token", "test_bearer_token");
+    // Test with environment variable set
+    std::env::set_var("xapi_access_token", "test_access_token");
 
     let config = TwitterConfig::from_env().unwrap();
-    assert_eq!(config.bearer_token, "test_bearer_token");
+    assert_eq!(config.access_token, "test_access_token");
 
-    // Clean up environment variables
-    std::env::remove_var("xapi_bearer_token");
+    // Clean up environment variable
+    std::env::remove_var("xapi_access_token");
 }
 
 /// Unit test for the get_server_port function.

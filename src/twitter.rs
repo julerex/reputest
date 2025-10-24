@@ -9,7 +9,7 @@ use serde_json::json;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::config::TwitterConfig;
-use crate::oauth::{build_bearer_auth_header, build_oauth2_user_context_header};
+use crate::oauth::build_oauth2_user_context_header;
 
 /// Posts a tweet to Twitter/X using the API v2 endpoint.
 ///
@@ -92,7 +92,7 @@ pub async fn post_tweet(text: &str) -> Result<String, Box<dyn std::error::Error 
 ///
 /// This function uses the Twitter API v2 search endpoint to find tweets containing
 /// the specified hashtag that were posted within the last hour. It uses OAuth 2.0
-/// Bearer Token authentication as required by v2 endpoints. It logs all found
+/// User Context Access Token authentication for v2 endpoints. It logs all found
 /// tweets to the application logs.
 ///
 /// # Parameters
@@ -107,7 +107,7 @@ pub async fn post_tweet(text: &str) -> Result<String, Box<dyn std::error::Error 
 /// # Requirements
 ///
 /// The following environment variables must be set:
-/// - `xapi_bearer_token` (OAuth 2.0 Bearer Token for v2 endpoints)
+/// - `xapi_access_token` (OAuth 2.0 User Context Access Token for v2 endpoints)
 ///
 /// # Example
 ///
@@ -161,8 +161,8 @@ pub async fn search_tweets_with_hashtag(
         start_time
     );
 
-    // Build the Authorization header with Bearer Token (OAuth 2.0)
-    let auth_header = build_bearer_auth_header(&config.bearer_token);
+    // Build the Authorization header with OAuth 2.0 User Context Access Token
+    let auth_header = build_oauth2_user_context_header(&config.access_token);
 
     // Send the authenticated request to Twitter API
     let response = client
