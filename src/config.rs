@@ -7,12 +7,15 @@ use std::env;
 
 /// Configuration struct for Twitter/X API credentials.
 ///
-/// This struct holds the Bearer Token required to authenticate with the Twitter/X API v2 endpoints.
-/// The Bearer Token is loaded from environment variables.
+/// This struct holds the credentials required to authenticate with the Twitter/X API v2 endpoints.
+/// It supports both OAuth 2.0 Application-Only (Bearer Token) for read operations and
+/// OAuth 2.0 User Context (Access Token) for user-specific operations like posting tweets.
 #[derive(Debug)]
 pub struct TwitterConfig {
-    /// The Bearer Token for OAuth 2.0 authentication (v2 endpoints)
+    /// The Bearer Token for OAuth 2.0 Application-Only authentication (read-only operations)
     pub bearer_token: String,
+    /// The Access Token for OAuth 2.0 User Context authentication (user-specific operations)
+    pub access_token: String,
 }
 
 impl TwitterConfig {
@@ -20,7 +23,8 @@ impl TwitterConfig {
     ///
     /// # Required Environment Variables
     ///
-    /// - `xapi_bearer_token`: Twitter API Bearer Token (OAuth 2.0 for v2 endpoints)
+    /// - `xapi_bearer_token`: Twitter API Bearer Token (OAuth 2.0 Application-Only for read operations)
+    /// - `xapi_access_token`: Twitter API Access Token (OAuth 2.0 User Context for user operations)
     ///
     /// # Returns
     ///
@@ -34,12 +38,14 @@ impl TwitterConfig {
     ///
     /// // Set environment variables before calling
     /// std::env::set_var("xapi_bearer_token", "your_bearer_token");
+    /// std::env::set_var("xapi_access_token", "your_access_token");
     ///
     /// let config = TwitterConfig::from_env().unwrap();
     /// ```
     pub fn from_env() -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         Ok(TwitterConfig {
             bearer_token: env::var("xapi_bearer_token")?,
+            access_token: env::var("xapi_access_token")?,
         })
     }
 }

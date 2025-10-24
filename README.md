@@ -1,11 +1,11 @@
 # Reputest - Rust Web Service with Twitter/X API Integration
 
-A modern Rust web service built with Axum that provides HTTP endpoints for testing and demonstration purposes, featuring Twitter/X API integration using OAuth 2.0 Bearer token authentication and automated hashtag monitoring via cronjobs.
+A modern Rust web service built with Axum that provides HTTP endpoints for testing and demonstration purposes, featuring Twitter/X API integration using OAuth 2.0 User Context authentication for posting tweets and automated hashtag monitoring via cronjobs.
 
 ## Features
 
 - 🦀 **Rust-based web service** with Axum framework for high performance
-- 🐦 **Twitter/X API integration** with OAuth 2.0 Bearer token authentication
+- 🐦 **Twitter/X API integration** with OAuth 2.0 User Context authentication for posting tweets
 - 📅 **Automated cronjob scheduling** for hashtag monitoring (GMGV hashtag every 10 minutes)
 - 🌐 **Multiple HTTP endpoints** for testing and health monitoring
 - 📝 **Structured logging** with configurable log levels
@@ -27,12 +27,46 @@ The following environment variables are required for full functionality:
 
 ### Required for Twitter/X API Integration
 
-- `xapi_bearer_token`: Twitter API Bearer token (OAuth 2.0 for v2 endpoints)
+- `xapi_bearer_token`: Twitter API Bearer token (OAuth 2.0 Application-Only for read operations)
+- `xapi_access_token`: Twitter API Access token (OAuth 2.0 User Context for posting tweets)
 
 ### Optional Configuration
 
 - `PORT`: Server port (defaults to 3000)
 - `RUST_LOG`: Log level (defaults to info)
+
+## 🤖 Twitter Bot Setup
+
+This service can be used as a Twitter bot. To set up OAuth 2.0 User Context authentication for posting tweets:
+
+### Quick Setup
+
+1. **Configure your Twitter App** in the [Twitter Developer Portal](https://developer.twitter.com/):
+   - Enable OAuth 2.0
+   - Set App Type to "Single Page App"
+   - Add redirect URI: `http://localhost:8080/callback`
+   - Select scopes: `tweet.read`, `tweet.write`, `users.read`, `offline.access`
+
+2. **Get your access token** using the built-in authorization script:
+   ```bash
+   cargo run --bin authorize_bot
+   ```
+
+3. **Set your environment variables**:
+   ```bash
+   export xapi_bearer_token="your_bearer_token"
+   export xapi_access_token="your_access_token"
+   ```
+
+4. **Test your bot**:
+   ```bash
+   curl -X POST http://localhost:3000/tweet
+   ```
+
+### Token Management
+
+- **Refresh expired tokens**: `cargo run --bin refresh_token`
+- **Detailed setup guide**: See [docs/BOT_SETUP.md](docs/BOT_SETUP.md)
 
 ## API Endpoints
 

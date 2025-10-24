@@ -1,7 +1,7 @@
 //! Twitter/X API integration module.
 //!
 //! This module contains functions for interacting with the Twitter/X API,
-//! including posting tweets using OAuth 2.0 Bearer token authentication.
+//! including posting tweets using OAuth 2.0 User Context authentication.
 
 use log::{error, info, warn};
 use reqwest::Client;
@@ -9,11 +9,11 @@ use serde_json::json;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::config::TwitterConfig;
-use crate::oauth::build_bearer_auth_header;
+use crate::oauth::{build_bearer_auth_header, build_oauth2_user_context_header};
 
 /// Posts a tweet to Twitter/X using the API v2 endpoint.
 ///
-/// This function uses OAuth 2.0 Bearer Token authentication to post a tweet
+/// This function uses OAuth 2.0 User Context authentication to post a tweet
 /// to the Twitter/X API v2 endpoint. It builds the proper authorization header
 /// and sends the request with the tweet content.
 ///
@@ -29,7 +29,7 @@ use crate::oauth::build_bearer_auth_header;
 /// # Requirements
 ///
 /// The following environment variables must be set:
-/// - `xapi_bearer_token` (OAuth 2.0 Bearer Token for v2 endpoints)
+/// - `xapi_access_token` (OAuth 2.0 User Context Access Token for posting tweets)
 ///
 /// # Example
 ///
@@ -64,8 +64,8 @@ pub async fn post_tweet(text: &str) -> Result<String, Box<dyn std::error::Error 
         "text": text
     });
 
-    // Build the Authorization header with Bearer Token (OAuth 2.0)
-    let auth_header = build_bearer_auth_header(&config.bearer_token);
+    // Build the Authorization header with OAuth 2.0 User Context Access Token
+    let auth_header = build_oauth2_user_context_header(&config.access_token);
 
     // Send the authenticated request to Twitter API
     let response = client

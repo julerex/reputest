@@ -37,6 +37,11 @@ tokio-cron-scheduler = "0.9"
 urlencoding = "2.1"
 # Date and time handling
 chrono = { version = "0.4", features = ["serde"] }
+# For OAuth 2.0 PKCE authorization script
+rand = "0.8"
+sha2 = "0.10"
+base64 = "0.21"
+url = "2.4"
 
 [dev-dependencies]
 # Testing utilities for async code
@@ -56,3 +61,13 @@ lto = true
 codegen-units = 1
 # Abort on panic instead of unwinding (smaller binary)
 panic = "abort"
+
+# Binary for bot authorization
+[[bin]]
+name = "authorize_bot"
+path = "scripts/authorize_bot.rs"
+
+# Binary for token refresh
+[[bin]]
+name = "refresh_token"
+path = "scripts/refresh_token.rs"

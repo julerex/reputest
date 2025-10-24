@@ -58,8 +58,11 @@ The Reputest service uses OAuth 2.0 Bearer token authentication for X API v2 end
 Add this to your environment or `.env` file:
 
 ```bash
-# OAuth 2.0 Bearer token for v2 endpoints
+# OAuth 2.0 Bearer token for read-only operations (v2 endpoints)
 export xapi_bearer_token="your_bearer_token_here"
+
+# OAuth 2.0 User Context Access Token for posting tweets
+export xapi_access_token="your_access_token_here"
 ```
 
 ## Important Notes
