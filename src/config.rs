@@ -164,7 +164,10 @@ impl TwitterConfig {
         let client_id = match env::var("xapi_client_id") {
             Ok(id) => {
                 info!("Found xapi_client_id environment variable");
-                debug!("Client ID (masked): {}...", &id[..std::cmp::min(id.len(), 8)]);
+                debug!(
+                    "Client ID (masked): {}...",
+                    &id[..std::cmp::min(id.len(), 8)]
+                );
                 Some(id)
             }
             Err(_) => {
@@ -176,7 +179,10 @@ impl TwitterConfig {
         let client_secret = match env::var("xapi_client_secret") {
             Ok(secret) => {
                 info!("Found xapi_client_secret environment variable");
-                debug!("Client secret (masked): {}...", &secret[..std::cmp::min(secret.len(), 8)]);
+                debug!(
+                    "Client secret (masked): {}...",
+                    &secret[..std::cmp::min(secret.len(), 8)]
+                );
                 Some(secret)
             }
             Err(_) => {
@@ -198,7 +204,10 @@ impl TwitterConfig {
         };
 
         info!("Twitter configuration loaded successfully");
-        if config.refresh_token.is_some() && config.client_id.is_some() && config.client_secret.is_some() {
+        if config.refresh_token.is_some()
+            && config.client_id.is_some()
+            && config.client_secret.is_some()
+        {
             info!("Automatic token refresh is enabled");
         } else {
             info!("Automatic token refresh is disabled - manual token refresh required");
@@ -231,9 +240,11 @@ impl TwitterConfig {
     ///     }
     /// }
     /// ```
-    pub async fn refresh_access_token(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn refresh_access_token(
+        &mut self,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         info!("Attempting to refresh access token");
-        
+
         // Check if we have all required credentials for refresh
         let (client_id, client_secret, refresh_token) = match (
             self.client_id.as_ref(),
@@ -257,22 +268,25 @@ impl TwitterConfig {
         };
 
         info!("All required credentials available for token refresh");
-        
+
         // Import the refresh function from oauth module
         use crate::oauth::refresh_access_token;
-        
+
         // Attempt to refresh the token
         match refresh_access_token(client_id, client_secret, refresh_token).await {
             Ok(new_access_token) => {
                 info!("Access token refreshed successfully");
-                
+
                 // Update the access token in the config
                 let old_token_length = self.access_token.len();
                 self.access_token = new_access_token;
                 let new_token_length = self.access_token.len();
-                
-                info!("Access token updated: old length {}, new length {}", old_token_length, new_token_length);
-                
+
+                info!(
+                    "Access token updated: old length {}, new length {}",
+                    old_token_length, new_token_length
+                );
+
                 // Log the updated token info (masked)
                 let token_prefix = if new_token_length > 8 {
                     &self.access_token[..8]
@@ -286,7 +300,7 @@ impl TwitterConfig {
                 } else {
                     ""
                 };
-                
+
                 let masked_token = if new_token_length > 16 {
                     format!("{}...{}", token_prefix, token_suffix)
                 } else if new_token_length > 8 {
@@ -294,10 +308,10 @@ impl TwitterConfig {
                 } else {
                     format!("{}...", token_prefix)
                 };
-                
+
                 debug!("Updated access token (masked): {}", masked_token);
                 warn!("Access token has been refreshed - consider updating your xapi_access_token environment variable");
-                
+
                 Ok(())
             }
             Err(e) => {

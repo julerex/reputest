@@ -31,74 +31,127 @@ async fn make_authenticated_request(
     request_builder: reqwest::RequestBuilder,
     operation_name: &str,
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-    info!("Making authenticated request for operation: {}", operation_name);
-    
+    info!(
+        "Making authenticated request for operation: {}",
+        operation_name
+    );
+
     // First attempt with current token
-    let response = request_builder.try_clone()
+    let response = request_builder
+        .try_clone()
         .ok_or("Failed to clone request builder")?
         .send()
         .await?;
-    
+
     let status = response.status();
-    info!("Received response with status: {} for operation: {}", status, operation_name);
-    
+    info!(
+        "Received response with status: {} for operation: {}",
+        status, operation_name
+    );
+
     if status.is_success() {
         let response_text = response.text().await?;
         info!("Operation '{}' completed successfully", operation_name);
         debug!("Response body for '{}': {}", operation_name, response_text);
         return Ok(response_text);
     }
-    
+
     // Handle 401 Unauthorized - token might be expired
     if status == 401 {
-        warn!("Received 401 Unauthorized for operation '{}' - access token may be expired", operation_name);
-        
+        warn!(
+            "Received 401 Unauthorized for operation '{}' - access token may be expired",
+            operation_name
+        );
+
         if config.can_refresh_token() {
-            info!("Attempting automatic token refresh for operation '{}'", operation_name);
-            
+            info!(
+                "Attempting automatic token refresh for operation '{}'",
+                operation_name
+            );
+
             match config.refresh_access_token().await {
                 Ok(_) => {
-                    info!("Token refreshed successfully, retrying operation '{}'", operation_name);
-                    
+                    info!(
+                        "Token refreshed successfully, retrying operation '{}'",
+                        operation_name
+                    );
+
                     // Retry the request with the new token
                     let new_auth_header = build_oauth2_user_context_header(&config.access_token);
-                    
+
                     // Rebuild the request with the new authorization header
                     let retry_response = request_builder
                         .header("Authorization", new_auth_header)
                         .send()
                         .await?;
-                    
+
                     let retry_status = retry_response.status();
-                    info!("Retry response status: {} for operation '{}'", retry_status, operation_name);
-                    
+                    info!(
+                        "Retry response status: {} for operation '{}'",
+                        retry_status, operation_name
+                    );
+
                     if retry_status.is_success() {
                         let response_text = retry_response.text().await?;
-                        info!("Operation '{}' completed successfully after token refresh", operation_name);
-                        debug!("Response body for '{}' (after refresh): {}", operation_name, response_text);
+                        info!(
+                            "Operation '{}' completed successfully after token refresh",
+                            operation_name
+                        );
+                        debug!(
+                            "Response body for '{}' (after refresh): {}",
+                            operation_name, response_text
+                        );
                         return Ok(response_text);
                     } else {
                         let error_text = retry_response.text().await?;
-                        error!("Operation '{}' failed after token refresh - Status: {}, Response: {}", operation_name, retry_status, error_text);
-                        return Err(format!("Twitter API error after token refresh ({}): {}", retry_status, error_text).into());
+                        error!(
+                            "Operation '{}' failed after token refresh - Status: {}, Response: {}",
+                            operation_name, retry_status, error_text
+                        );
+                        return Err(format!(
+                            "Twitter API error after token refresh ({}): {}",
+                            retry_status, error_text
+                        )
+                        .into());
                     }
                 }
                 Err(e) => {
-                    error!("Token refresh failed for operation '{}': {}", operation_name, e);
-                    return Err(format!("Token refresh failed for operation '{}': {}", operation_name, e).into());
+                    error!(
+                        "Token refresh failed for operation '{}': {}",
+                        operation_name, e
+                    );
+                    return Err(format!(
+                        "Token refresh failed for operation '{}': {}",
+                        operation_name, e
+                    )
+                    .into());
                 }
             }
         } else {
-            error!("Cannot refresh token for operation '{}' - missing refresh credentials", operation_name);
+            error!(
+                "Cannot refresh token for operation '{}' - missing refresh credentials",
+                operation_name
+            );
             let error_text = response.text().await?;
-            return Err(format!("Twitter API error (401) for operation '{}' and token refresh not available: {}", operation_name, error_text).into());
+            return Err(format!(
+                "Twitter API error (401) for operation '{}' and token refresh not available: {}",
+                operation_name, error_text
+            )
+            .into());
         }
     }
-    
+
     // Handle other error status codes
     let error_text = response.text().await?;
-    error!("Operation '{}' failed - Status: {}, Response: {}", operation_name, status, error_text);
-    Err(format!("Twitter API error for operation '{}' ({}): {}", operation_name, status, error_text).into())
+    error!(
+        "Operation '{}' failed - Status: {}, Response: {}",
+        operation_name, status, error_text
+    );
+    Err(format!(
+        "Twitter API error for operation '{}' ({}): {}",
+        operation_name, status, error_text
+    )
+    .into())
 }
 
 /// Posts a tweet to Twitter/X using the API v2 endpoint.
@@ -277,13 +330,12 @@ pub async fn search_tweets_with_hashtag(
     debug!("Request headers: Authorization: Bearer [REDACTED]");
 
     // Create the request builder
-    let request_builder = client
-        .get(&url)
-        .header("Authorization", auth_header);
+    let request_builder = client.get(&url).header("Authorization", auth_header);
 
     // Use the authenticated request helper with automatic token refresh
-    let response_text = make_authenticated_request(&mut config, request_builder, "search_tweets").await?;
-    
+    let response_text =
+        make_authenticated_request(&mut config, request_builder, "search_tweets").await?;
+
     debug!("Search response body: {}", response_text);
     let json_response: serde_json::Value = serde_json::from_str(&response_text)?;
 
