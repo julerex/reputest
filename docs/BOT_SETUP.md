@@ -43,14 +43,19 @@ The script will:
 
 ## Step 3: Set Environment Variables
 
-After running the authorization script, you'll get an access token and potentially a refresh token. Set the access token as an environment variable:
+After running the authorization script, you'll get an access token and potentially a refresh token. Set them as environment variables:
 
 ```bash
 # Required: For all operations (read and write) - OAuth 2.0 User Context
 export xapi_access_token="your_access_token_here"
+
+# Optional: For automatic token refresh (recommended)
+export xapi_refresh_token="your_refresh_token_here"
+export xapi_client_id="your_client_id_here"
+export xapi_client_secret="your_client_secret_here"
 ```
 
-**Note**: Store your refresh token securely (e.g., in your deployment platform's secrets management) for manual token refresh when needed.
+**Note**: If you set the refresh token and client credentials, your bot will automatically refresh expired access tokens without manual intervention.
 
 ## Step 4: Test Your Bot
 
@@ -59,37 +64,31 @@ export xapi_access_token="your_access_token_here"
 curl -X POST http://localhost:3000/tweet
 ```
 
-## Step 5: Handle Token Refresh (Important!)
+## Step 5: Token Refresh (Automatic!)
 
-OAuth 2.0 User Context tokens expire. You need to manually refresh them when they expire:
+OAuth 2.0 User Context tokens expire. Your bot now handles this automatically:
 
-### Manual Token Refresh
-When your bot gets a 401 error, use the refresh token utility to get a new access token:
+### Automatic Token Refresh (Default Behavior)
+If you've set the required environment variables (`xapi_refresh_token`, `xapi_client_id`, `xapi_client_secret`), your bot will:
+
+1. **Detect 401 errors** automatically when making API calls
+2. **Refresh the access token** using the stored refresh token
+3. **Retry the failed request** with the new token
+4. **Log the entire process** for debugging
+
+### Manual Refresh (Fallback)
+If automatic refresh is not configured or fails, you can manually refresh tokens:
 
 ```bash
 # Use the refresh token utility
 cargo run --bin refresh_token
 ```
 
-The script will:
-1. Ask for your Client ID and Client Secret
-2. Ask for your refresh token
-3. Exchange the refresh token for a new access token
-4. Display the new access token for you to update
-
-### Updating Your Access Token
-After getting a new access token from the refresh script:
-
-```bash
-# Update your environment variable with the new token
-export xapi_access_token="your_new_access_token_here"
-```
-
-### Storing Refresh Tokens Securely
-Store your refresh token securely in your deployment platform:
-- **Fly.io**: Use `fly secrets set xapi_refresh_token="your_refresh_token"`
-- **Docker**: Use environment variables or Docker secrets
-- **Local development**: Use `.env` files (never commit to version control)
+### Monitoring Token Refresh
+The bot logs all token refresh activities:
+- When tokens are refreshed automatically
+- When refresh fails and manual intervention is needed
+- Token expiration times and refresh success/failure
 
 ## Alternative: OAuth 1.0a for Bots
 

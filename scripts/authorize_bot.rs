@@ -85,7 +85,7 @@ async fn exchange_code_for_token(
             // Check if we also got a refresh token
             if let Some(refresh_token) = json.get("refresh_token").and_then(|v| v.as_str()) {
                 println!("✅ Refresh token also received!");
-                println!("📝 Store this refresh token securely for manual token refresh:");
+                println!("📝 Set these environment variables for automatic token refresh:");
                 println!(
                     "   - Fly.io: fly secrets set xapi_refresh_token=\"{}\"",
                     refresh_token
@@ -93,7 +93,11 @@ async fn exchange_code_for_token(
                 println!("   - Docker: Use environment variables or Docker secrets");
                 println!("   - Local: Store in .env file (never commit to version control)");
                 println!("");
-                println!("💡 When your access token expires, use: cargo run --bin refresh_token");
+                println!("💡 For automatic refresh, also set:");
+                println!("   export xapi_client_id=\"your_client_id\"");
+                println!("   export xapi_client_secret=\"your_client_secret\"");
+                println!("");
+                println!("🔄 With all credentials set, your bot will automatically refresh expired tokens!");
             }
             Ok(access_token.to_string())
         } else {

@@ -63,19 +63,23 @@ This service can be used as a Twitter bot. To set up OAuth 2.0 User Context auth
 
 ### Token Management
 
+- **Automatic token refresh**: Set `xapi_refresh_token`, `xapi_client_id`, and `xapi_client_secret` environment variables
 - **Manual token refresh**: `cargo run --bin refresh_token`
 - **Detailed setup guide**: See [docs/BOT_SETUP.md](docs/BOT_SETUP.md)
 
-**Token Refresh**: When your access token expires (401 errors), use the refresh token utility to get a new access token and update your environment variable.
+**New Feature**: The bot now automatically detects expired tokens (401 errors) and refreshes them using the stored refresh token, eliminating the need for manual intervention in most cases.
 
 ### Environment Variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `xapi_access_token` | ✅ Yes | OAuth 2.0 User Context access token for Twitter API |
+| `xapi_refresh_token` | ⚠️ Optional | Refresh token for automatic token renewal |
+| `xapi_client_id` | ⚠️ Optional | OAuth 2.0 client ID (required for automatic refresh) |
+| `xapi_client_secret` | ⚠️ Optional | OAuth 2.0 client secret (required for automatic refresh) |
 | `PORT` | ❌ No | Server port (defaults to 3000) |
 
-**Note**: Store your refresh token securely in your deployment platform's secrets management for manual token refresh when needed.
+**Note**: For automatic token refresh, you need all three optional variables (`xapi_refresh_token`, `xapi_client_id`, `xapi_client_secret`).
 
 ## API Endpoints
 
