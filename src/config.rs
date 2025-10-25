@@ -274,13 +274,20 @@ impl TwitterConfig {
 
         // Attempt to refresh the token
         match refresh_access_token(client_id, client_secret, refresh_token).await {
-            Ok(new_access_token) => {
+            Ok((new_access_token, new_refresh_token)) => {
                 info!("Access token refreshed successfully");
 
                 // Update the access token in the config
                 let old_token_length = self.access_token.len();
                 self.access_token = new_access_token;
                 let new_token_length = self.access_token.len();
+
+                // Update refresh token if a new one was provided
+                if let Some(new_refresh) = new_refresh_token {
+                    info!("Updating refresh token with new token from Twitter");
+                    self.refresh_token = Some(new_refresh);
+                    warn!("Refresh token has been updated - consider updating your xapi_refresh_token environment variable");
+                }
 
                 info!(
                     "Access token updated: old length {}, new length {}",

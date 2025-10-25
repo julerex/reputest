@@ -89,7 +89,7 @@ pub fn build_oauth2_user_context_header(access_token: &str) -> String {
 ///
 /// # Returns
 ///
-/// - `Ok(String)`: The new access token on successful refresh
+/// - `Ok((String, Option<String>))`: The new access token and optionally a new refresh token on successful refresh
 /// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the refresh fails
 ///
 /// # Example
@@ -105,7 +105,12 @@ pub fn build_oauth2_user_context_header(access_token: &str) -> String {
 ///         "your_refresh_token"
 ///     ).await;
 ///     match result {
-///         Ok(new_token) => println!("New access token: {}", new_token),
+///         Ok((new_token, new_refresh)) => {
+///             println!("New access token: {}", new_token);
+///             if let Some(refresh) = new_refresh {
+///                 println!("New refresh token: {}", refresh);
+///             }
+///         },
 ///         Err(e) => eprintln!("Token refresh failed: {}", e),
 ///     }
 /// }
@@ -114,7 +119,7 @@ pub async fn refresh_access_token(
     client_id: &str,
     client_secret: &str,
     refresh_token: &str,
-) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<(String, Option<String>), Box<dyn std::error::Error + Send + Sync>> {
     info!("Starting OAuth 2.0 access token refresh process");
 
     // Log token info (masked for security)
@@ -210,7 +215,9 @@ pub async fn refresh_access_token(
             debug!("New access token (masked): {}", masked_new_token);
 
             // Check if we also got a new refresh token
-            if let Some(new_refresh_token) = json.get("refresh_token").and_then(|v| v.as_str()) {
+            let new_refresh_token = if let Some(new_refresh_token) =
+                json.get("refresh_token").and_then(|v| v.as_str())
+            {
                 let new_refresh_length = new_refresh_token.len();
                 let new_refresh_prefix = if new_refresh_length > 8 {
                     &new_refresh_token[..8]
@@ -239,7 +246,10 @@ pub async fn refresh_access_token(
                 );
                 debug!("New refresh token (masked): {}", masked_new_refresh);
                 warn!("New refresh token received - you should update your xapi_refresh_token environment variable");
-            }
+                Some(new_refresh_token.to_string())
+            } else {
+                None
+            };
 
             // Check token expiration
             if let Some(expires_in) = json.get("expires_in").and_then(|v| v.as_u64()) {
@@ -256,7 +266,7 @@ pub async fn refresh_access_token(
                 }
             }
 
-            Ok(access_token.to_string())
+            Ok((access_token.to_string(), new_refresh_token))
         } else {
             error!("No access_token found in refresh response");
             Err("No access_token in refresh response".into())
