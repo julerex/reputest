@@ -27,8 +27,7 @@ The following environment variables are required for full functionality:
 
 ### Required for Twitter/X API Integration
 
-- `xapi_bearer_token`: Twitter API Bearer token (OAuth 2.0 Application-Only for read operations)
-- `xapi_access_token`: Twitter API Access token (OAuth 2.0 User Context for posting tweets)
+- `xapi_access_token`: Twitter API Access token (OAuth 2.0 User Context for all operations)
 
 ### Optional Configuration
 
@@ -54,7 +53,6 @@ This service can be used as a Twitter bot. To set up OAuth 2.0 User Context auth
 
 3. **Set your environment variables**:
    ```bash
-   export xapi_bearer_token="your_bearer_token"
    export xapi_access_token="your_access_token"
    ```
 
@@ -65,18 +63,29 @@ This service can be used as a Twitter bot. To set up OAuth 2.0 User Context auth
 
 ### Token Management
 
-- **Refresh expired tokens**: `cargo run --bin refresh_token`
+- **Manual token refresh**: `cargo run --bin refresh_token`
 - **Detailed setup guide**: See [docs/BOT_SETUP.md](docs/BOT_SETUP.md)
+
+**Token Refresh**: When your access token expires (401 errors), use the refresh token utility to get a new access token and update your environment variable.
+
+### Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `xapi_access_token` | ✅ Yes | OAuth 2.0 User Context access token for Twitter API |
+| `PORT` | ❌ No | Server port (defaults to 3000) |
+
+**Note**: Store your refresh token securely in your deployment platform's secrets management for manual token refresh when needed.
 
 ## API Endpoints
 
-| Method | Endpoint | Description | Response |
-|--------|----------|-------------|----------|
-| `GET` | `/` | Welcome message | `"A new reputest is in the house!"` |
-| `GET` | `/reputest` | Test endpoint | `"Reputesting!"` |
-| `POST` | `/reputest` | Test endpoint | `"Reputesting!"` |
-| `GET` | `/health` | Health check | `{"status": "healthy", "service": "reputest"}` |
-| `POST` | `/tweet` | Post tweet to Twitter/X | Tweet response or error |
+| Method | Endpoint    | Description             | Response                                       |
+|--------|-------------|-------------------------|------------------------------------------------|
+| `GET`  | `/`         | Welcome message         | `"A new reputest is in the house!"`            |
+| `GET`  | `/reputest` | Test endpoint           | `"Reputesting!"`                               |
+| `POST` | `/reputest` | Test endpoint           | `"Reputesting!"`                               |
+| `GET`  | `/health`   | Health check            | `{"status": "healthy", "service": "reputest"}` |
+| `POST` | `/tweet`    | Post tweet to Twitter/X | Tweet response or error                        | 
 
 ### Example API Usage
 
@@ -87,7 +96,7 @@ curl http://localhost:3000/reputest
 # Check health
 curl http://localhost:3000/health
 
-# Post a tweet (requires Twitter API Bearer token)
+# Post a tweet (requires Twitter API access token)
 curl -X POST http://localhost:3000/tweet
 ```
 
@@ -106,7 +115,7 @@ Create a `.env` file or set environment variables:
 
 ```bash
 # Required for Twitter functionality
-export xapi_bearer_token="your_bearer_token"
+export xapi_access_token="your_access_token"
 
 # Optional
 export PORT=3000
@@ -139,7 +148,7 @@ docker build -t reputest .
 
 # Run the container
 docker run -p 3000:3000 \
-  -e xapi_bearer_token="your_bearer_token" \
+  -e xapi_access_token="your_access_token" \
   reputest
 ```
 
@@ -163,7 +172,7 @@ fly launch
 fly deploy
 
 # Set environment variables
-fly secrets set xapi_bearer_token="your_bearer_token"
+fly secrets set xapi_access_token="your_access_token"
 ```
 
 ## Project Structure
@@ -175,7 +184,7 @@ reputest/
 │   ├── config.rs            # Configuration and environment handling
 │   ├── handlers.rs          # HTTP route handlers
 │   ├── twitter.rs           # Twitter/X API integration
-│   ├── oauth.rs             # OAuth 2.0 Bearer token authentication implementation
+│   ├── oauth.rs             # OAuth 2.0 User Context authentication implementation
 │   ├── cronjob.rs           # Scheduled task management
 │   └── tests.rs             # Comprehensive test suite
 ├── Cargo.toml               # Rust dependencies and project metadata
@@ -190,9 +199,9 @@ reputest/
 
 ### Twitter/X API Integration
 
-The service includes OAuth 2.0 Bearer token authentication for Twitter/X API v2:
+The service includes OAuth 2.0 User Context authentication for Twitter/X API v2:
 
-- **Authentication**: OAuth 2.0 Bearer token authentication for v2 endpoints
+- **Authentication**: OAuth 2.0 User Context authentication for v2 endpoints
 - **Tweet Posting**: Post tweets via the `/tweet` endpoint using v2 API
 - **Hashtag Monitoring**: Automated search for tweets with specific hashtags using v2 search API
 - **Rate Limiting**: Proper handling of API rate limits and errors
@@ -250,7 +259,7 @@ The project includes comprehensive documentation and follows Rust best practices
 
 ### Common Issues
 
-1. **Twitter API Errors**: Verify the Bearer token environment variable is set correctly
+1. **Twitter API Errors**: Verify the access token environment variable is set correctly
 2. **Port Conflicts**: Change the `PORT` environment variable if 3000 is in use
 3. **Docker Build Fails**: Ensure Docker is running and you have sufficient disk space
 4. **Deployment Issues**: Check cloud provider credentials and resource limits
@@ -297,6 +306,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Acknowledgments
 
 - Built with [Axum](https://github.com/tokio-rs/axum) web framework
-- Twitter/X API integration using OAuth 2.0 Bearer token authentication
+- Twitter/X API integration using OAuth 2.0 User Context authentication
 - Docker multi-stage builds for optimized containers
 - Fly.io for deployment

@@ -79,9 +79,22 @@ async fn exchange_code_for_token(
         let response_text = response.text().await?;
         println!("Token response: {}", response_text);
 
-        // Parse the JSON response to extract access_token
+        // Parse the JSON response to extract access_token and refresh_token
         let json: serde_json::Value = serde_json::from_str(&response_text)?;
         if let Some(access_token) = json.get("access_token").and_then(|v| v.as_str()) {
+            // Check if we also got a refresh token
+            if let Some(refresh_token) = json.get("refresh_token").and_then(|v| v.as_str()) {
+                println!("✅ Refresh token also received!");
+                println!("📝 Store this refresh token securely for manual token refresh:");
+                println!(
+                    "   - Fly.io: fly secrets set xapi_refresh_token=\"{}\"",
+                    refresh_token
+                );
+                println!("   - Docker: Use environment variables or Docker secrets");
+                println!("   - Local: Store in .env file (never commit to version control)");
+                println!("");
+                println!("💡 When your access token expires, use: cargo run --bin refresh_token");
+            }
             Ok(access_token.to_string())
         } else {
             Err("No access_token in response".into())

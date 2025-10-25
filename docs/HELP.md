@@ -4,7 +4,7 @@ This guide explains how to obtain the necessary credentials from the X Developer
 
 ## Overview
 
-The Reputest service uses OAuth 2.0 Bearer token authentication for X API v2 endpoints.
+The Reputest service uses OAuth 2.0 User Context authentication for X API v2 endpoints.
 
 ## Prerequisites
 
@@ -32,14 +32,14 @@ The Reputest service uses OAuth 2.0 Bearer token authentication for X API v2 end
 
 ## Step 3: Get Your API Keys and Tokens
 
-### For Bearer Token (OAuth 2.0)
+### For Access Token (OAuth 2.0 User Context)
 
 1. Navigate to (["Projects and Apps"](https://developer.x.com/en/portal/projects-and-apps))
 2. Locate your App within your Project
 3. Navigate to your App's **"Keys and tokens"** tab (identified by a key icon)
-4. Locate the **"Bearer Token"** field under **"Authentication Tokens"**
-5. Click the **"Generate"** button to create a new Bearer Token
-6. Copy this token for API operations
+4. Under **"Authentication Tokens"**, you'll need to generate an Access Token
+5. For OAuth 2.0 User Context, you'll need to complete the OAuth 2.0 Authorization Code Flow
+6. Use the built-in authorization script: `cargo run --bin authorize_bot`
 
 ## Step 4: Configure App Permissions
 
@@ -53,15 +53,12 @@ The Reputest service uses OAuth 2.0 Bearer token authentication for X API v2 end
 
 ## Step 5: Set Environment Variables
 
-### For OAuth 2.0 Bearer Token
+### For OAuth 2.0 User Context
 
 Add this to your environment or `.env` file:
 
 ```bash
-# OAuth 2.0 Bearer token for read-only operations (v2 endpoints)
-export xapi_bearer_token="your_bearer_token_here"
-
-# OAuth 2.0 User Context Access Token for posting tweets
+# OAuth 2.0 User Context Access Token for all operations (read and write)
 export xapi_access_token="your_access_token_here"
 ```
 
@@ -69,7 +66,7 @@ export xapi_access_token="your_access_token_here"
 
 ### Rate Limits
 
-- **OAuth 2.0 Bearer Token**: 75 requests per 15-minute window for most endpoints
+- **OAuth 2.0 User Context**: 75 requests per 15-minute window for most endpoints
 - **Tweet Posting**: 300 tweets per 3-hour window
 
 ### Security Best Practices
@@ -85,7 +82,7 @@ export xapi_access_token="your_access_token_here"
 #### Common Issues
 
 1. **"Invalid credentials" error**
-   - Verify the Bearer token is correct
+   - Verify the access token is correct
    - Check for extra spaces or characters
    - Ensure the token hasn't been regenerated
 
@@ -106,18 +103,18 @@ You can test your credentials using curl:
 # Test the service (requires the service to be running)
 curl -X POST http://localhost:3000/tweet
 
-# Test Bearer token directly
-curl -H "Authorization: Bearer YOUR_BEARER_TOKEN" \
+# Test access token directly
+curl -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
      "https://api.x.com/2/users/by/username/your_username"
 ```
 
 ## Current Implementation
 
-The Reputest service is already configured to use OAuth 2.0 Bearer token authentication:
+The Reputest service is already configured to use OAuth 2.0 User Context authentication:
 
-1. **Authentication method** in `src/twitter.rs` uses Bearer tokens
-2. **HTTP headers** use `Authorization: Bearer TOKEN`
-3. **Environment variable handling** in `src/config.rs` expects `xapi_bearer_token`
+1. **Authentication method** in `src/twitter.rs` uses OAuth 2.0 User Context
+2. **HTTP headers** use `Authorization: Bearer TOKEN` (correct format for OAuth 2.0 User Context)
+3. **Environment variable handling** in `src/config.rs` expects `xapi_access_token`
 4. **API endpoints** use X API v2 endpoints for both read and write operations
 
 ## Additional Resources

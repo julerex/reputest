@@ -1,12 +1,12 @@
 //! # Reputest
 //!
 //! A Rust web service that provides HTTP endpoints for testing and demonstration purposes.
-//! The service includes functionality to post tweets via the Twitter/X API using OAuth 2.0 Bearer token authentication.
+//! The service includes functionality to post tweets via the Twitter/X API using OAuth 2.0 User Context authentication.
 //!
 //! ## Features
 //!
 //! - HTTP server with multiple endpoints (`/`, `/reputest`, `/health`, `/tweet`)
-//! - Twitter/X API integration with OAuth 2.0 Bearer token authentication
+//! - Twitter/X API integration with OAuth 2.0 User Context authentication
 //! - Comprehensive test suite
 //! - Structured logging
 //! - Health check endpoint

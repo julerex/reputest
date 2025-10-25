@@ -39,4 +39,5 @@ pub use cronjob::{run_gmgv_cronjob, start_gmgv_cronjob};
 pub use handlers::{
     handle_health, handle_reputest_get, handle_reputest_post, handle_root, handle_tweet,
 };
+pub use oauth::build_oauth2_user_context_header;
 pub use twitter::{post_tweet, search_tweets_with_hashtag};

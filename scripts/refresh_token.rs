@@ -28,9 +28,20 @@ async fn refresh_access_token(
         let response_text = response.text().await?;
         println!("Token refresh response: {}", response_text);
 
-        // Parse the JSON response to extract access_token
+        // Parse the JSON response to extract access_token and potentially new refresh_token
         let json: serde_json::Value = serde_json::from_str(&response_text)?;
         if let Some(access_token) = json.get("access_token").and_then(|v| v.as_str()) {
+            // Check if we also got a new refresh token
+            if let Some(new_refresh_token) = json.get("refresh_token").and_then(|v| v.as_str()) {
+                println!("✅ New refresh token also received!");
+                println!("📝 Update your refresh token in your secure storage:");
+                println!(
+                    "   - Fly.io: fly secrets set xapi_refresh_token=\"{}\"",
+                    new_refresh_token
+                );
+                println!("   - Docker: Update your environment variables or Docker secrets");
+                println!("   - Local: Update your .env file");
+            }
             Ok(access_token.to_string())
         } else {
             Err("No access_token in response".into())
@@ -71,8 +82,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     println!("\n✅ Success! Your new access token is:");
     println!("{}", access_token);
-    println!("\n📝 Update your environment variable:");
-    println!("export xapi_access_token=\"{}\"", access_token);
+    println!("\n📝 Update your access token:");
+    println!(
+        "   - Fly.io: fly secrets set xapi_access_token=\"{}\"",
+        access_token
+    );
+    println!("   - Docker: Update your environment variables");
+    println!("   - Local: export xapi_access_token=\"{}\"", access_token);
 
     Ok(())
 }

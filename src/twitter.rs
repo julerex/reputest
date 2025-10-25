@@ -3,7 +3,7 @@
 //! This module contains functions for interacting with the Twitter/X API,
 //! including posting tweets using OAuth 2.0 User Context authentication.
 
-use log::{error, info, warn};
+use log::{debug, error, info, warn};
 use reqwest::Client;
 use serde_json::json;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -54,18 +54,35 @@ use crate::oauth::build_oauth2_user_context_header;
 /// - Twitter API rate limiting or other API errors
 /// - Invalid tweet content (too long, etc.)
 pub async fn post_tweet(text: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    info!("Starting tweet post operation for text: '{}'", text);
+
     // Load Twitter API credentials from environment variables
+    info!("Loading Twitter configuration from environment variables");
     let config = TwitterConfig::from_env()?;
+    debug!("Twitter config loaded successfully");
+
     let client = Client::new();
     let url = "https://api.x.com/2/tweets";
+    info!("Target URL: {}", url);
 
     // Create the tweet payload
     let payload = json!({
         "text": text
     });
+    debug!("Tweet payload: {}", serde_json::to_string_pretty(&payload)?);
 
     // Build the Authorization header with OAuth 2.0 User Context Access Token
+    info!("Building OAuth 2.0 User Context authorization header");
     let auth_header = build_oauth2_user_context_header(&config.access_token);
+
+    // Log request details
+    info!("Sending POST request to Twitter API v2");
+    debug!("Request URL: {}", url);
+    debug!("Request headers: Authorization: Bearer [REDACTED], Content-Type: application/json");
+    debug!(
+        "Request payload: {}",
+        serde_json::to_string_pretty(&payload)?
+    );
 
     // Send the authenticated request to Twitter API
     let response = client
@@ -76,15 +93,25 @@ pub async fn post_tweet(text: &str) -> Result<String, Box<dyn std::error::Error 
         .send()
         .await?;
 
+    // Log response details
+    let status = response.status();
+    let headers = response.headers();
+    info!("Received response with status: {}", status);
+    debug!("Response headers: {:?}", headers);
+
     // Handle the API response
-    if response.status().is_success() {
+    if status.is_success() {
         let response_text = response.text().await?;
-        info!("Tweet posted successfully: {}", response_text);
+        info!("Tweet posted successfully");
+        debug!("Response body: {}", response_text);
         Ok(response_text)
     } else {
         let error_text = response.text().await?;
-        error!("Failed to post tweet: {}", error_text);
-        Err(format!("Twitter API error: {}", error_text).into())
+        error!(
+            "Failed to post tweet - Status: {}, Response: {}",
+            status, error_text
+        );
+        Err(format!("Twitter API error ({}): {}", status, error_text).into())
     }
 }
 
@@ -133,14 +160,19 @@ pub async fn post_tweet(text: &str) -> Result<String, Box<dyn std::error::Error 
 pub async fn search_tweets_with_hashtag(
     hashtag: &str,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    info!("Starting tweet search operation for hashtag: '{}'", hashtag);
+
     // Post a tweet with "loggerman"
+    info!("Posting test tweet with 'loggerman'");
     match post_tweet("loggerman").await {
         Ok(response) => info!("Posted 'loggerman' tweet successfully: {}", response),
         Err(e) => error!("Failed to post 'loggerman' tweet: {}", e),
     }
 
     // Load Twitter API credentials from environment variables
+    info!("Loading Twitter configuration from environment variables for search");
     let config = TwitterConfig::from_env()?;
+    debug!("Twitter config loaded successfully for search");
     let client = Client::new();
 
     // Calculate the timestamp for 1 hour ago
@@ -161,8 +193,18 @@ pub async fn search_tweets_with_hashtag(
         start_time
     );
 
+    info!("Search URL: {}", url);
+    debug!("Search query: {}", query);
+    debug!("Start time: {}", start_time);
+
     // Build the Authorization header with OAuth 2.0 User Context Access Token
+    info!("Building OAuth 2.0 User Context authorization header for search");
     let auth_header = build_oauth2_user_context_header(&config.access_token);
+
+    // Log request details
+    info!("Sending GET request to Twitter API v2 search endpoint");
+    debug!("Request URL: {}", url);
+    debug!("Request headers: Authorization: Bearer [REDACTED]");
 
     // Send the authenticated request to Twitter API
     let response = client
@@ -171,9 +213,16 @@ pub async fn search_tweets_with_hashtag(
         .send()
         .await?;
 
+    // Log response details
+    let status = response.status();
+    let headers = response.headers();
+    info!("Received search response with status: {}", status);
+    debug!("Response headers: {:?}", headers);
+
     // Handle the API response
-    if response.status().is_success() {
+    if status.is_success() {
         let response_text = response.text().await?;
+        debug!("Search response body: {}", response_text);
         let json_response: serde_json::Value = serde_json::from_str(&response_text)?;
 
         // Extract tweets from the response
@@ -207,7 +256,10 @@ pub async fn search_tweets_with_hashtag(
         Ok(())
     } else {
         let error_text = response.text().await?;
-        error!("Failed to search tweets: {}", error_text);
-        Err(format!("Twitter API error: {}", error_text).into())
+        error!(
+            "Failed to search tweets - Status: {}, Response: {}",
+            status, error_text
+        );
+        Err(format!("Twitter API error ({}): {}", status, error_text).into())
     }
 }

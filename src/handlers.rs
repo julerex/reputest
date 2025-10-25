@@ -62,7 +62,7 @@ pub async fn handle_health() -> Json<Value> {
 /// Handles POST requests to the `/tweet` endpoint.
 ///
 /// This endpoint posts a tweet to Twitter/X with the message "Hello world".
-/// It demonstrates the OAuth 2.0 Bearer token authentication and Twitter API v2 integration.
+/// It demonstrates the OAuth 2.0 User Context authentication and Twitter API v2 integration.
 ///
 /// # Returns
 ///
@@ -91,7 +91,7 @@ pub async fn handle_health() -> Json<Value> {
 ///
 /// # Requirements
 ///
-/// Requires Twitter API Bearer token to be set in environment variables.
+/// Requires Twitter API access token to be set in environment variables.
 pub async fn handle_tweet() -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     match post_tweet("Hello world").await {
         Ok(response) => {

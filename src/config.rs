@@ -3,6 +3,7 @@
 //! This module contains configuration structures and environment variable handling
 //! for the Twitter/X API integration.
 
+use log::{debug, error, info, warn};
 use std::env;
 
 /// Configuration struct for Twitter/X API credentials.
@@ -39,9 +40,68 @@ impl TwitterConfig {
     /// let config = TwitterConfig::from_env().unwrap();
     /// ```
     pub fn from_env() -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        Ok(TwitterConfig {
-            access_token: env::var("xapi_access_token")?,
-        })
+        info!("Loading Twitter configuration from environment variables");
+
+        // Load required access token
+        let access_token = match env::var("xapi_access_token") {
+            Ok(token) => {
+                let token_length = token.len();
+                info!(
+                    "Found xapi_access_token environment variable with length: {}",
+                    token_length
+                );
+
+                // Log token info (masked for security)
+                let token_prefix = if token_length > 8 {
+                    &token[..8]
+                } else {
+                    &token
+                };
+                let token_suffix = if token_length > 16 {
+                    &token[token_length - 8..]
+                } else if token_length > 8 {
+                    &token[8..]
+                } else {
+                    ""
+                };
+
+                let masked_token = if token_length > 16 {
+                    format!("{}...{}", token_prefix, token_suffix)
+                } else if token_length > 8 {
+                    format!("{}...", token_prefix)
+                } else {
+                    format!("{}...", token_prefix)
+                };
+
+                debug!("Access token (masked): {}", masked_token);
+
+                // Validate token format (basic checks)
+                if token.is_empty() {
+                    error!("Access token is empty");
+                    return Err("Access token cannot be empty".into());
+                }
+
+                if token_length < 10 {
+                    warn!(
+                        "Access token seems unusually short ({} characters)",
+                        token_length
+                    );
+                }
+
+                token
+            }
+            Err(e) => {
+                error!("Failed to load xapi_access_token from environment: {}", e);
+                error!("Make sure xapi_access_token environment variable is set");
+                return Err(
+                    format!("Missing xapi_access_token environment variable: {}", e).into(),
+                );
+            }
+        };
+
+        let config = TwitterConfig { access_token };
+        info!("Twitter configuration loaded successfully");
+        Ok(config)
     }
 }
 

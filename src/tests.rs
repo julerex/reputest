@@ -196,7 +196,7 @@ async fn test_health_endpoint() {
 /// Integration test for the tweet endpoint (POST /tweet) without credentials.
 ///
 /// This test verifies that the tweet endpoint properly handles the case where
-/// Twitter API Bearer token is not configured. It expects:
+/// Twitter API access token is not configured. It expects:
 /// - The response status to be 500 Internal Server Error
 /// - The response to be valid JSON with an error status
 /// - The error message to indicate a failure to post the tweet
@@ -214,7 +214,7 @@ async fn test_tweet_endpoint_without_credentials() {
         .unwrap();
 
     let response = app.oneshot(request).await.unwrap();
-    // Should return 500 because Twitter Bearer token is not set in test environment
+    // Should return 500 because Twitter access token is not set in test environment
     assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
 
     let body = response.into_body().collect().await.unwrap().to_bytes();
