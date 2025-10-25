@@ -4,7 +4,6 @@
 //! authentication for all Twitter API v2 operations including posting tweets
 //! and searching tweets.
 
-
 /// Builds the Authorization header for OAuth 2.0 User Context authentication.
 ///
 /// This function creates the proper Authorization header for OAuth 2.0 User Context
