@@ -51,9 +51,7 @@ docker-clean: ## Clean up local Docker images
 docker-build: ## Build Docker image
 	sudo $(DOCKER) build -t $(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG) .
 
-# Utility targets ############################################################
-
-.PHONY: info
+.PHONY: docker-info
 info: ## Show deployment information
 	@echo "Configuration:"
 	@echo "  Image: $(FULL_IMAGE_NAME)"
@@ -82,7 +80,7 @@ fly-status: ## Show Fly app status
 
 .PHONY: fly-machines-list
 fly-machines-list: ## Show Fly machines list
-   fly machines list
+	fly machines list
 
 # Bot targets ############################################################
 
@@ -95,5 +93,15 @@ bot-refresh-access-token: ## Refresh Twitter bot access token
 	cargo run --bin refresh_token
 
 .PHONY: db-check
+db-check: ## Check database connection
 	fly mpg connect
-	
+
+# Test targets ############################################################
+
+.PHONY: test
+test: ## Run tests
+	unset ARGV0 && cargo test --no-fail-fast 2>&1
+
+.PHONY: format
+format: ## Format code
+	unset ARGV0 && cargo fmt

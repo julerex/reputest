@@ -11,10 +11,11 @@
 //! - Structured logging
 //! - Health check endpoint
 //!
-//! ## Environment Variables
+//! ## Configuration
 //!
-//! The following environment variables are required for Twitter API functionality:
-//! - `xapi_access_token`: Twitter API Access token (OAuth 2.0 User Context for v2 endpoints)
+//! The following configuration is required:
+//! - Database with access tokens stored in the `access_tokens` table
+//! - `DATABASE_URL`: PostgreSQL connection string
 //! - `PORT`: Server port (defaults to 3000)
 //!
 //! ## API Endpoints
@@ -43,7 +44,6 @@ mod twitter;
 
 use config::get_server_port;
 use cronjob::start_gmgv_cronjob;
-use db::load_tokens_from_db;
 use handlers::{
     handle_health, handle_reputest_get, handle_reputest_post, handle_root, handle_tweet,
 };
@@ -98,11 +98,8 @@ async fn main() {
     // Initialize the logging system
     env_logger::init();
 
-    // Load tokens from database and set as environment variables
-    if let Err(e) = load_tokens_from_db().await {
-        log::warn!("Failed to load tokens from database at startup: {}", e);
-        log::warn!("Continuing with existing environment variables (if any)");
-    }
+    // Note: Tokens are now loaded directly from the database when needed
+    // No need to pre-load them as environment variables
 
     // Start the cronjob scheduler for GMGV hashtag monitoring
     let cronjob_handle = tokio::spawn(async {

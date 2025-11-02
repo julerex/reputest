@@ -193,6 +193,100 @@ pub async fn get_latest_access_token(
     }
 }
 
+/// Stores a new access token in the database.
+///
+/// This function inserts a new access token into the access_tokens table
+/// with the current timestamp. The old tokens remain in the table for historical
+/// purposes, but only the latest one will be retrieved.
+///
+/// # Parameters
+///
+/// - `pool`: A reference to the PostgreSQL connection pool
+/// - `token`: The access token to store
+///
+/// # Returns
+///
+/// - `Ok(())`: If the token was successfully stored
+/// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the insert fails
+pub async fn save_access_token(
+    pool: &PgPool,
+    token: &str,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    info!("Storing new access token in database");
+
+    let token_length = token.len();
+    let masked_token = if token_length > 16 {
+        format!("{}...{}", &token[..8], &token[token_length - 8..])
+    } else if token_length > 8 {
+        format!("{}...", &token[..8])
+    } else {
+        format!("{}...", &token[..8])
+    };
+
+    debug!("Access token length: {}", token_length);
+    debug!("Access token (masked): {}", masked_token);
+
+    sqlx::query(
+        r#"
+        INSERT INTO access_tokens (token, created_at)
+        VALUES ($1, NOW())
+        "#,
+    )
+    .bind(token)
+    .execute(pool)
+    .await?;
+
+    info!("Successfully stored new access token in database");
+    Ok(())
+}
+
+/// Creates the access_tokens table if it doesn't exist.
+///
+/// This function is safe to call multiple times as it uses CREATE TABLE IF NOT EXISTS.
+/// It's typically called during application initialization or via the setup script.
+///
+/// # Parameters
+///
+/// - `pool`: A reference to the PostgreSQL connection pool
+///
+/// # Returns
+///
+/// - `Ok(())`: If the table was created or already exists
+/// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the table creation fails
+pub async fn create_access_tokens_table(
+    pool: &PgPool,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    info!("Creating access_tokens table if it doesn't exist");
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS access_tokens (
+            id SERIAL PRIMARY KEY,
+            token TEXT NOT NULL,
+            created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    info!("access_tokens table ready");
+
+    // Create an index on created_at for faster queries
+    sqlx::query(
+        r#"
+        CREATE INDEX IF NOT EXISTS idx_access_tokens_created_at
+        ON access_tokens (created_at DESC)
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    info!("Index on created_at created (if it didn't exist)");
+
+    Ok(())
+}
+
 /// Creates the refresh_tokens table if it doesn't exist.
 ///
 /// This function is safe to call multiple times as it uses CREATE TABLE IF NOT EXISTS.
@@ -238,63 +332,4 @@ pub async fn create_refresh_tokens_table(
     info!("Index on created_at created (if it didn't exist)");
 
     Ok(())
-}
-
-/// Loads tokens from the database and sets them as environment variables.
-///
-/// This function fetches the latest refresh_token and access_token from the database
-/// and sets them as `xapi_refresh_token` and `xapi_access_token` environment variables
-/// respectively. If a token is not found in the database, the corresponding environment
-/// variable will not be set (existing values will remain).
-///
-/// # Returns
-///
-/// - `Ok(())`: If tokens were successfully loaded (even if some were missing)
-/// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If database connection fails
-pub async fn load_tokens_from_db() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // Check if DATABASE_URL is set
-    if env::var("DATABASE_URL").is_err() {
-        warn!("DATABASE_URL not set, skipping token loading from database");
-        return Ok(());
-    }
-
-    info!("Loading tokens from database and setting as environment variables");
-
-    match get_db_pool().await {
-        Ok(pool) => {
-            // Fetch access token
-            match get_latest_access_token(&pool).await {
-                Ok(Some(token)) => {
-                    env::set_var("xapi_access_token", &token);
-                    info!("Successfully loaded access token from database and set as xapi_access_token");
-                }
-                Ok(None) => {
-                    warn!("No access token found in database, xapi_access_token environment variable will not be updated");
-                }
-                Err(e) => {
-                    warn!("Failed to fetch access token from database: {}", e);
-                }
-            }
-
-            // Fetch refresh token
-            match get_latest_refresh_token(&pool).await {
-                Ok(Some(token)) => {
-                    env::set_var("xapi_refresh_token", &token);
-                    info!("Successfully loaded refresh token from database and set as xapi_refresh_token");
-                }
-                Ok(None) => {
-                    warn!("No refresh token found in database, xapi_refresh_token environment variable will not be updated");
-                }
-                Err(e) => {
-                    warn!("Failed to fetch refresh token from database: {}", e);
-                }
-            }
-
-            Ok(())
-        }
-        Err(e) => {
-            warn!("Failed to connect to database for token loading: {}", e);
-            Err(e)
-        }
-    }
 }

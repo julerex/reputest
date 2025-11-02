@@ -9,7 +9,9 @@ use serde_json::json;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::config::TwitterConfig;
+use crate::db;
 use crate::oauth::build_oauth2_user_context_header;
+use sqlx::PgPool;
 
 /// Makes an authenticated request to the Twitter API with automatic token refresh on 401 errors.
 ///
@@ -19,6 +21,7 @@ use crate::oauth::build_oauth2_user_context_header;
 /// # Parameters
 ///
 /// - `config`: Mutable reference to TwitterConfig (may be updated with new token)
+/// - `pool`: A reference to the PostgreSQL connection pool for saving refreshed tokens
 /// - `request_builder`: A configured reqwest::RequestBuilder ready to send
 /// - `operation_name`: Human-readable name for the operation (for logging)
 ///
@@ -28,6 +31,7 @@ use crate::oauth::build_oauth2_user_context_header;
 /// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the request fails or token refresh fails
 async fn make_authenticated_request(
     config: &mut TwitterConfig,
+    pool: &PgPool,
     request_builder: reqwest::RequestBuilder,
     operation_name: &str,
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
@@ -69,7 +73,7 @@ async fn make_authenticated_request(
                 operation_name
             );
 
-            match config.refresh_access_token().await {
+            match config.refresh_access_token(pool).await {
                 Ok(_) => {
                     info!(
                         "Token refreshed successfully, retrying operation '{}'",
@@ -171,8 +175,9 @@ async fn make_authenticated_request(
 ///
 /// # Requirements
 ///
-/// The following environment variables must be set:
-/// - `xapi_access_token` (OAuth 2.0 User Context Access Token for posting tweets)
+/// The following must be available:
+/// - Database connection (DATABASE_URL environment variable)
+/// - Access token in the `access_tokens` table (OAuth 2.0 User Context Access Token for posting tweets)
 ///
 /// # Example
 ///
@@ -199,9 +204,10 @@ async fn make_authenticated_request(
 pub async fn post_tweet(text: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     info!("Starting tweet post operation for text: '{}'", text);
 
-    // Load Twitter API credentials from environment variables
-    info!("Loading Twitter configuration from environment variables");
-    let mut config = TwitterConfig::from_env().await?;
+    // Get database pool and load Twitter API credentials from database
+    info!("Loading Twitter configuration from database");
+    let pool = db::get_db_pool().await?;
+    let mut config = TwitterConfig::from_env(&pool).await?;
     debug!("Twitter config loaded successfully");
 
     let client = Client::new();
@@ -235,7 +241,7 @@ pub async fn post_tweet(text: &str) -> Result<String, Box<dyn std::error::Error 
         .json(&payload);
 
     // Use the authenticated request helper with automatic token refresh
-    make_authenticated_request(&mut config, request_builder, "post_tweet").await
+    make_authenticated_request(&mut config, &pool, request_builder, "post_tweet").await
 }
 
 /// Searches for tweets with a specific hashtag in the past hour.
@@ -256,8 +262,9 @@ pub async fn post_tweet(text: &str) -> Result<String, Box<dyn std::error::Error 
 ///
 /// # Requirements
 ///
-/// The following environment variables must be set:
-/// - `xapi_access_token` (OAuth 2.0 User Context Access Token for v2 endpoints)
+/// The following must be available:
+/// - Database connection (DATABASE_URL environment variable)
+/// - Access token in the `access_tokens` table (OAuth 2.0 User Context Access Token for v2 endpoints)
 ///
 /// # Example
 ///
@@ -292,9 +299,10 @@ pub async fn search_tweets_with_hashtag(
         Err(e) => error!("Failed to post 'loggerman' tweet: {}", e),
     }
 
-    // Load Twitter API credentials from environment variables
-    info!("Loading Twitter configuration from environment variables for search");
-    let mut config = TwitterConfig::from_env().await?;
+    // Get database pool and load Twitter API credentials from database
+    info!("Loading Twitter configuration from database for search");
+    let pool = db::get_db_pool().await?;
+    let mut config = TwitterConfig::from_env(&pool).await?;
     debug!("Twitter config loaded successfully for search");
     let client = Client::new();
 
@@ -334,7 +342,7 @@ pub async fn search_tweets_with_hashtag(
 
     // Use the authenticated request helper with automatic token refresh
     let response_text =
-        make_authenticated_request(&mut config, request_builder, "search_tweets").await?;
+        make_authenticated_request(&mut config, &pool, request_builder, "search_tweets").await?;
 
     debug!("Search response body: {}", response_text);
     let json_response: serde_json::Value = serde_json::from_str(&response_text)?;

@@ -245,7 +245,7 @@ pub async fn refresh_access_token(
                     new_refresh_length
                 );
                 debug!("New refresh token (masked): {}", masked_new_refresh);
-                warn!("New refresh token received - you should update your xapi_refresh_token environment variable");
+                warn!("New refresh token received - it will be saved to the database");
                 Some(new_refresh_token.to_string())
             } else {
                 None

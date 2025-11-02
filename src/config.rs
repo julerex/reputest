@@ -5,6 +5,7 @@
 
 use crate::db;
 use log::{debug, error, info, warn};
+use sqlx::PgPool;
 use std::env;
 
 /// Configuration struct for Twitter/X API credentials.
@@ -25,193 +26,90 @@ pub struct TwitterConfig {
 }
 
 impl TwitterConfig {
-    /// Attempts to load the refresh token from the database.
-    ///
-    /// # Returns
-    ///
-    /// - `Ok(Some(String))`: If a refresh token was found in the database
-    /// - `Ok(None)`: If no token was found but database connection was successful
-    /// - `Err(...)`: If database connection failed or DATABASE_URL is not set
-    async fn load_refresh_token_from_db(
-    ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
-        // Check if DATABASE_URL is set
-        if env::var("DATABASE_URL").is_err() {
-            return Err("DATABASE_URL not set, skipping database lookup".into());
-        }
-
-        info!("Attempting to load refresh token from database");
-
-        match db::get_db_pool().await {
-            Ok(pool) => match db::get_latest_refresh_token(&pool).await {
-                Ok(Some(token)) => {
-                    info!("Successfully loaded refresh token from database");
-                    Ok(Some(token))
-                }
-                Ok(None) => {
-                    info!("No refresh token found in database");
-                    Ok(None)
-                }
-                Err(e) => {
-                    warn!("Failed to query database for refresh token: {}", e);
-                    Err(e)
-                }
-            },
-            Err(e) => {
-                warn!("Failed to connect to database: {}", e);
-                Err(e)
-            }
-        }
-    }
-
-    /// Loads the refresh token from environment variable.
-    ///
-    /// # Returns
-    ///
-    /// - `Ok(Some(String))`: If token was found and is not empty
-    /// - `Ok(None)`: If token was not found or is empty
-    /// - `Err(...)`: If there's an unexpected error
-    fn load_refresh_token_from_env(
-    ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
-        match env::var("xapi_refresh_token") {
-            Ok(token) => {
-                let token_length = token.len();
-                info!(
-                    "Found xapi_refresh_token environment variable with length: {}",
-                    token_length
-                );
-
-                // Log token info (masked for security)
-                let token_prefix = if token_length > 8 {
-                    &token[..8]
-                } else {
-                    &token
-                };
-                let token_suffix = if token_length > 16 {
-                    &token[token_length - 8..]
-                } else if token_length > 8 {
-                    &token[8..]
-                } else {
-                    ""
-                };
-
-                let masked_token = if token_length > 16 {
-                    format!("{}...{}", token_prefix, token_suffix)
-                } else if token_length > 8 {
-                    format!("{}...", token_prefix)
-                } else {
-                    format!("{}...", token_prefix)
-                };
-
-                debug!("Refresh token (masked): {}", masked_token);
-
-                if token.is_empty() {
-                    warn!("Refresh token is empty, automatic token refresh will be disabled");
-                    Ok(None)
-                } else {
-                    Ok(Some(token))
-                }
-            }
-            Err(_) => {
-                info!("No xapi_refresh_token found in environment variables - automatic token refresh will be disabled");
-                Ok(None)
-            }
-        }
-    }
-
     /// Saves a refresh token to the database.
     ///
     /// # Parameters
     ///
+    /// - `pool`: A reference to the PostgreSQL connection pool
     /// - `token`: The refresh token to save
     ///
     /// # Returns
     ///
     /// - `Ok(())`: If the token was successfully saved
-    /// - `Err(...)`: If saving failed or DATABASE_URL is not set
+    /// - `Err(...)`: If saving failed
     async fn save_refresh_token_to_db(
+        pool: &PgPool,
         token: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // Check if DATABASE_URL is set
-        if env::var("DATABASE_URL").is_err() {
-            return Err("DATABASE_URL not set, cannot save to database".into());
-        }
-
         info!("Attempting to save refresh token to database");
 
-        match db::get_db_pool().await {
-            Ok(pool) => {
-                // Ensure the table exists
-                if let Err(e) = db::create_refresh_tokens_table(&pool).await {
-                    warn!("Failed to ensure refresh_tokens table exists: {}", e);
-                }
+        // Ensure the table exists
+        if let Err(e) = db::create_refresh_tokens_table(pool).await {
+            warn!("Failed to ensure refresh_tokens table exists: {}", e);
+        }
 
-                match db::save_refresh_token(&pool, token).await {
-                    Ok(_) => {
-                        info!("Successfully saved refresh token to database");
-                        Ok(())
-                    }
-                    Err(e) => {
-                        warn!("Failed to save refresh token to database: {}", e);
-                        Err(e)
-                    }
-                }
+        match db::save_refresh_token(pool, token).await {
+            Ok(_) => {
+                info!("Successfully saved refresh token to database");
+                Ok(())
             }
             Err(e) => {
-                warn!("Failed to connect to database: {}", e);
+                warn!("Failed to save refresh token to database: {}", e);
                 Err(e)
             }
         }
     }
 
-    /// Creates a new `TwitterConfig` instance by loading credentials from environment variables.
+    /// Creates a new `TwitterConfig` instance by loading credentials from the database and environment variables.
     ///
-    /// # Required Environment Variables
+    /// # Required Parameters
     ///
-    /// - `xapi_access_token`: Twitter API Access Token (OAuth 2.0 User Context for all operations)
+    /// - `pool`: A reference to the PostgreSQL connection pool to fetch tokens from
+    ///
+    /// # Required Database Tables
+    ///
+    /// - `access_tokens`: Must contain at least one access token
     ///
     /// # Optional Environment Variables (for automatic token refresh)
     ///
-    /// - `DATABASE_URL`: PostgreSQL connection string (if set, refresh tokens will be loaded from database)
-    /// - `xapi_refresh_token`: Refresh Token for automatically refreshing expired access tokens (fallback if database unavailable)
     /// - `xapi_client_id`: Client ID for OAuth 2.0 operations
     /// - `xapi_client_secret`: Client Secret for OAuth 2.0 operations
     ///
+    /// # Token Loading
+    ///
+    /// - Access token: Loaded from the `access_tokens` table (required)
+    /// - Refresh token: Loaded from the `refresh_tokens` table (optional)
+    /// - Client credentials: Loaded from environment variables (optional)
+    ///
     /// # Returns
     ///
-    /// - `Ok(TwitterConfig)`: If the required environment variable is present
-    /// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the environment variable is missing
-    ///
-    /// # Refresh Token Loading Priority
-    ///
-    /// 1. First tries to load from database (if DATABASE_URL is set)
-    /// 2. Falls back to xapi_refresh_token environment variable
-    /// 3. If neither is available, automatic refresh is disabled
+    /// - `Ok(TwitterConfig)`: If the required access token is found in the database
+    /// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the access token is missing from the database
     ///
     /// # Example
     ///
-    /// ```rust
-    /// use reputest::TwitterConfig;
+    /// ```rust,no_run
+    /// use reputest::{TwitterConfig, db};
     ///
     /// #[tokio::main]
     /// async fn main() {
-    ///     // Set environment variables before calling
-    ///     std::env::set_var("xapi_access_token", "your_access_token");
+    ///     let pool = db::get_db_pool().await.unwrap();
+    ///     // Optionally set environment variables
     ///     std::env::set_var("xapi_client_id", "your_client_id");
     ///     std::env::set_var("xapi_client_secret", "your_client_secret");
-    ///     // Optionally set DATABASE_URL for database-backed refresh tokens
     ///
-    ///     let config = TwitterConfig::from_env().await.unwrap();
+    ///     let config = TwitterConfig::from_env(&pool).await.unwrap();
     /// }
     /// ```
-    pub async fn from_env() -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        info!("Loading Twitter configuration from environment variables");
+    pub async fn from_env(pool: &PgPool) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        info!("Loading Twitter configuration from database");
 
-        // Load required access token
-        let access_token = match env::var("xapi_access_token") {
-            Ok(token) => {
+        // Load required access token from database
+        let access_token = match db::get_latest_access_token(pool).await {
+            Ok(Some(token)) => {
                 let token_length = token.len();
                 info!(
-                    "Found xapi_access_token environment variable with length: {}",
+                    "Found access token in database with length: {}",
                     token_length
                 );
 
@@ -254,29 +152,29 @@ impl TwitterConfig {
 
                 token
             }
+            Ok(None) => {
+                error!("No access token found in database");
+                return Err("No access token found in database".into());
+            }
             Err(e) => {
-                error!("Failed to load xapi_access_token from environment: {}", e);
-                error!("Make sure xapi_access_token environment variable is set");
-                return Err(
-                    format!("Missing xapi_access_token environment variable: {}", e).into(),
-                );
+                error!("Failed to load access token from database: {}", e);
+                return Err(format!("Failed to load access token from database: {}", e).into());
             }
         };
 
-        // Load optional refresh token (try database first, then environment variable)
-        let refresh_token = match Self::load_refresh_token_from_db().await {
+        // Load optional refresh token from database
+        let refresh_token = match db::get_latest_refresh_token(pool).await {
             Ok(Some(token)) => {
                 info!("Successfully loaded refresh token from database");
                 Some(token)
             }
             Ok(None) => {
-                info!("No refresh token found in database, trying environment variable");
-                Self::load_refresh_token_from_env()?
+                info!("No refresh token found in database");
+                None
             }
             Err(e) => {
                 warn!("Failed to load refresh token from database: {}", e);
-                warn!("Falling back to environment variable");
-                Self::load_refresh_token_from_env()?
+                None
             }
         };
 
@@ -339,7 +237,11 @@ impl TwitterConfig {
     /// Attempts to refresh the access token using the stored refresh token and client credentials.
     ///
     /// This method automatically refreshes an expired access token if all required credentials
-    /// are available. It updates the access token in the config and logs the process.
+    /// are available. It updates the access token in the config and saves both tokens to the database.
+    ///
+    /// # Parameters
+    ///
+    /// - `pool`: A reference to the PostgreSQL connection pool to save tokens to
     ///
     /// # Returns
     ///
@@ -348,13 +250,14 @@ impl TwitterConfig {
     ///
     /// # Example
     ///
-    /// ```rust
-    /// use reputest::TwitterConfig;
+    /// ```rust,no_run
+    /// use reputest::{TwitterConfig, db};
     ///
     /// #[tokio::main]
     /// async fn main() {
-    ///     let mut config = TwitterConfig::from_env().await.unwrap();
-    ///     match config.refresh_access_token().await {
+    ///     let pool = db::get_db_pool().await.unwrap();
+    ///     let mut config = TwitterConfig::from_env(&pool).await.unwrap();
+    ///     match config.refresh_access_token(&pool).await {
     ///         Ok(_) => println!("Token refreshed successfully"),
     ///         Err(e) => eprintln!("Token refresh failed: {}", e),
     ///     }
@@ -362,6 +265,7 @@ impl TwitterConfig {
     /// ```
     pub async fn refresh_access_token(
         &mut self,
+        pool: &PgPool,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         info!("Attempting to refresh access token");
 
@@ -381,7 +285,7 @@ impl TwitterConfig {
                     error!("Missing xapi_client_secret");
                 }
                 if self.refresh_token.is_none() {
-                    error!("Missing xapi_refresh_token");
+                    error!("Missing refresh token (should be loaded from database)");
                 }
                 return Err("Missing required credentials for token refresh".into());
             }
@@ -399,8 +303,16 @@ impl TwitterConfig {
 
                 // Update the access token in the config
                 let old_token_length = self.access_token.len();
-                self.access_token = new_access_token;
+                self.access_token = new_access_token.clone();
                 let new_token_length = self.access_token.len();
+
+                // Save new access token to database
+                if let Err(e) = db::save_access_token(pool, &new_access_token).await {
+                    warn!("Failed to save access token to database: {}", e);
+                    warn!("Access token updated in memory only");
+                } else {
+                    info!("Access token successfully saved to database");
+                }
 
                 // Update refresh token if a new one was provided
                 if let Some(new_refresh) = new_refresh_token {
@@ -408,9 +320,9 @@ impl TwitterConfig {
                     self.refresh_token = Some(new_refresh.clone());
 
                     // Try to save to database
-                    if let Err(e) = Self::save_refresh_token_to_db(&new_refresh).await {
+                    if let Err(e) = Self::save_refresh_token_to_db(pool, &new_refresh).await {
                         warn!("Failed to save refresh token to database: {}", e);
-                        warn!("Refresh token updated in memory only - consider updating manually");
+                        warn!("Refresh token updated in memory only");
                     } else {
                         info!("Refresh token successfully saved to database");
                     }
@@ -444,7 +356,6 @@ impl TwitterConfig {
                 };
 
                 debug!("Updated access token (masked): {}", masked_token);
-                warn!("Access token has been refreshed - consider updating your xapi_access_token environment variable");
 
                 Ok(())
             }

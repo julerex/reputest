@@ -12,10 +12,11 @@
 //! - Structured logging
 //! - Health check endpoint
 //!
-//! ## Environment Variables
+//! ## Configuration
 //!
-//! The following environment variables are required for Twitter API functionality:
-//! - `xapi_access_token`: Twitter API Access Token (OAuth 2.0 User Context for v2 endpoints)
+//! The following configuration is required:
+//! - Database with access tokens stored in the `access_tokens` table
+//! - `DATABASE_URL`: PostgreSQL connection string
 //! - `PORT`: Server port (defaults to 3000)
 //!
 //!
