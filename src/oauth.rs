@@ -54,8 +54,6 @@ pub fn build_oauth2_user_context_header(access_token: &str) -> String {
 
     let masked_token = if token_length > 16 {
         format!("{}...{}", token_prefix, token_suffix)
-    } else if token_length > 8 {
-        format!("{}...", token_prefix)
     } else {
         format!("{}...", token_prefix)
     };
@@ -139,8 +137,6 @@ pub async fn refresh_access_token(
 
     let masked_refresh_token = if refresh_token_length > 16 {
         format!("{}...{}", refresh_token_prefix, refresh_token_suffix)
-    } else if refresh_token_length > 8 {
-        format!("{}...", refresh_token_prefix)
     } else {
         format!("{}...", refresh_token_prefix)
     };
@@ -202,8 +198,6 @@ pub async fn refresh_access_token(
 
             let masked_new_token = if new_token_length > 16 {
                 format!("{}...{}", new_token_prefix, new_token_suffix)
-            } else if new_token_length > 8 {
-                format!("{}...", new_token_prefix)
             } else {
                 format!("{}...", new_token_prefix)
             };
@@ -234,8 +228,6 @@ pub async fn refresh_access_token(
 
                 let masked_new_refresh = if new_refresh_length > 16 {
                     format!("{}...{}", new_refresh_prefix, new_refresh_suffix)
-                } else if new_refresh_length > 8 {
-                    format!("{}...", new_refresh_prefix)
                 } else {
                     format!("{}...", new_refresh_prefix)
                 };

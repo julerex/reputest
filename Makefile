@@ -105,3 +105,7 @@ test: ## Run tests
 .PHONY: format
 format: ## Format code
 	unset ARGV0 && cargo fmt
+
+.PHONY: clippy
+clippy: ## Run clippy
+	unset ARGV0 && cargo clippy --all-targets --all-features -- -D warnings

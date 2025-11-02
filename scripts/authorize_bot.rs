@@ -92,11 +92,11 @@ async fn exchange_code_for_token(
                 );
                 println!("   - Docker: Use environment variables or Docker secrets");
                 println!("   - Local: Store in .env file (never commit to version control)");
-                println!("");
+                println!();
                 println!("💡 For automatic refresh, also set:");
                 println!("   export xapi_client_id=\"your_client_id\"");
                 println!("   export xapi_client_secret=\"your_client_secret\"");
-                println!("");
+                println!();
                 println!("🔄 With all credentials set, your bot will automatically refresh expired tokens!");
             }
             Ok(access_token.to_string())

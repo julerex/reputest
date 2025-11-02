@@ -129,8 +129,6 @@ impl TwitterConfig {
 
                 let masked_token = if token_length > 16 {
                     format!("{}...{}", token_prefix, token_suffix)
-                } else if token_length > 8 {
-                    format!("{}...", token_prefix)
                 } else {
                     format!("{}...", token_prefix)
                 };
@@ -349,8 +347,6 @@ impl TwitterConfig {
 
                 let masked_token = if new_token_length > 16 {
                     format!("{}...{}", token_prefix, token_suffix)
-                } else if new_token_length > 8 {
-                    format!("{}...", token_prefix)
                 } else {
                     format!("{}...", token_prefix)
                 };

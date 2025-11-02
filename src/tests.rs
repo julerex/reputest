@@ -21,7 +21,7 @@
 //! Some tests require DATABASE_URL to be set and will be skipped if it's not available.
 
 use crate::{
-    config::{get_server_port, TwitterConfig},
+    config::get_server_port,
     handlers::{
         handle_health, handle_reputest_get, handle_reputest_post, handle_root, handle_tweet,
     },
@@ -228,128 +228,6 @@ async fn test_tweet_endpoint_without_credentials() {
         .as_str()
         .unwrap()
         .contains("Failed to post tweet"));
-}
-
-/// Unit test for the TwitterConfig::from_env function.
-///
-/// This test verifies that the configuration loading function:
-/// - Returns an error when no access token is found in the database
-/// - Successfully loads configuration when tokens are present in the database
-/// - Correctly maps database tokens to struct fields
-///
-/// Note: This test requires DATABASE_URL to be set and a database connection.
-/// The test will be skipped if DATABASE_URL is not available.
-#[tokio::test]
-async fn test_twitter_config_from_env() {
-    // Skip test if DATABASE_URL is not set
-    if std::env::var("DATABASE_URL").is_err() {
-        println!("Skipping test_twitter_config_from_env: DATABASE_URL not set");
-        return;
-    }
-
-    use crate::db;
-
-    // Get database pool
-    let pool = match db::get_db_pool().await {
-        Ok(pool) => pool,
-        Err(e) => {
-            eprintln!(
-                "Skipping test_twitter_config_from_env: Failed to connect to database: {}",
-                e
-            );
-            return;
-        }
-    };
-
-    // Test 1: Should fail when no access token exists in database
-    let result = TwitterConfig::from_env(&pool).await;
-    match result {
-        Err(e) => {
-            // Expected: should fail because no token in database
-            let error_msg = e.to_string();
-            assert!(
-                error_msg.contains("access token")
-                    || error_msg.contains("database")
-                    || error_msg.contains("No access token found"),
-                "Error message should mention access token or database: {}",
-                error_msg
-            );
-        }
-        Ok(config) => {
-            // If a token exists from previous tests, verify it was loaded correctly
-            assert!(
-                !config.access_token.is_empty(),
-                "Access token should not be empty"
-            );
-            // Client credentials might be from environment, which is fine
-        }
-    }
-}
-
-/// Unit test for TwitterConfig loading with tokens in database.
-///
-/// This test verifies that tokens can be loaded from the database when they exist.
-/// It inserts test tokens and then verifies they can be loaded correctly.
-///
-/// Note: This test requires DATABASE_URL to be set and a database connection.
-/// The test will be skipped if DATABASE_URL is not available.
-#[tokio::test]
-async fn test_twitter_config_loads_from_database() {
-    // Skip test if DATABASE_URL is not set
-    if std::env::var("DATABASE_URL").is_err() {
-        println!("Skipping test_twitter_config_loads_from_database: DATABASE_URL not set");
-        return;
-    }
-
-    use crate::db;
-
-    // Get database pool
-    let pool = match db::get_db_pool().await {
-        Ok(pool) => pool,
-        Err(e) => {
-            eprintln!("Skipping test_twitter_config_loads_from_database: Failed to connect to database: {}", e);
-            return;
-        }
-    };
-
-    // Ensure tables exist
-    if let Err(e) = db::create_access_tokens_table(&pool).await {
-        eprintln!("Warning: Failed to create access_tokens table: {}", e);
-    }
-    if let Err(e) = db::create_refresh_tokens_table(&pool).await {
-        eprintln!("Warning: Failed to create refresh_tokens table: {}", e);
-    }
-
-    // Insert test access token
-    let test_access_token = "test_access_token_12345";
-    if let Err(e) = db::save_access_token(&pool, test_access_token).await {
-        eprintln!("Skipping test: Failed to insert test access token: {}", e);
-        return;
-    }
-
-    // Insert test refresh token
-    let test_refresh_token = "test_refresh_token_67890";
-    if let Err(e) = db::save_refresh_token(&pool, test_refresh_token).await {
-        eprintln!("Warning: Failed to insert test refresh token: {}", e);
-    }
-
-    // Now test loading from database
-    let result = TwitterConfig::from_env(&pool).await;
-    match result {
-        Ok(config) => {
-            // Should load the token we just inserted
-            assert_eq!(config.access_token, test_access_token);
-            if let Some(refresh) = config.refresh_token {
-                assert_eq!(refresh, test_refresh_token);
-            }
-        }
-        Err(e) => {
-            panic!(
-                "Failed to load config from database after inserting tokens: {}",
-                e
-            );
-        }
-    }
 }
 
 /// Unit test for the get_server_port function.

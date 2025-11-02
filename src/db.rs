@@ -67,8 +67,6 @@ pub async fn get_latest_refresh_token(
             let token_length = token.len();
             let masked_token = if token_length > 16 {
                 format!("{}...{}", &token[..8], &token[token_length - 8..])
-            } else if token_length > 8 {
-                format!("{}...", &token[..8])
             } else {
                 format!("{}...", &token[..8])
             };
@@ -112,8 +110,6 @@ pub async fn save_refresh_token(
     let token_length = token.len();
     let masked_token = if token_length > 16 {
         format!("{}...{}", &token[..8], &token[token_length - 8..])
-    } else if token_length > 8 {
-        format!("{}...", &token[..8])
     } else {
         format!("{}...", &token[..8])
     };
@@ -172,8 +168,6 @@ pub async fn get_latest_access_token(
             let token_length = token.len();
             let masked_token = if token_length > 16 {
                 format!("{}...{}", &token[..8], &token[token_length - 8..])
-            } else if token_length > 8 {
-                format!("{}...", &token[..8])
             } else {
                 format!("{}...", &token[..8])
             };
@@ -217,8 +211,6 @@ pub async fn save_access_token(
     let token_length = token.len();
     let masked_token = if token_length > 16 {
         format!("{}...{}", &token[..8], &token[token_length - 8..])
-    } else if token_length > 8 {
-        format!("{}...", &token[..8])
     } else {
         format!("{}...", &token[..8])
     };
@@ -253,6 +245,7 @@ pub async fn save_access_token(
 ///
 /// - `Ok(())`: If the table was created or already exists
 /// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the table creation fails
+#[allow(dead_code)] // Used in tests
 pub async fn create_access_tokens_table(
     pool: &PgPool,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
