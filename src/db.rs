@@ -232,54 +232,6 @@ pub async fn save_access_token(
     Ok(())
 }
 
-/// Creates the access_tokens table if it doesn't exist.
-///
-/// This function is safe to call multiple times as it uses CREATE TABLE IF NOT EXISTS.
-/// It's typically called during application initialization or via the setup script.
-///
-/// # Parameters
-///
-/// - `pool`: A reference to the PostgreSQL connection pool
-///
-/// # Returns
-///
-/// - `Ok(())`: If the table was created or already exists
-/// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the table creation fails
-#[allow(dead_code)] // Used in tests
-pub async fn create_access_tokens_table(
-    pool: &PgPool,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    info!("Creating access_tokens table if it doesn't exist");
-
-    sqlx::query(
-        r#"
-        CREATE TABLE IF NOT EXISTS access_tokens (
-            id SERIAL PRIMARY KEY,
-            token TEXT NOT NULL,
-            created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-        )
-        "#,
-    )
-    .execute(pool)
-    .await?;
-
-    info!("access_tokens table ready");
-
-    // Create an index on created_at for faster queries
-    sqlx::query(
-        r#"
-        CREATE INDEX IF NOT EXISTS idx_access_tokens_created_at
-        ON access_tokens (created_at DESC)
-        "#,
-    )
-    .execute(pool)
-    .await?;
-
-    info!("Index on created_at created (if it didn't exist)");
-
-    Ok(())
-}
-
 /// Creates the refresh_tokens table if it doesn't exist.
 ///
 /// This function is safe to call multiple times as it uses CREATE TABLE IF NOT EXISTS.
