@@ -36,12 +36,14 @@ use tower_http::trace::TraceLayer;
 
 mod config;
 mod cronjob;
+mod db;
 mod handlers;
 mod oauth;
 mod twitter;
 
 use config::get_server_port;
 use cronjob::start_gmgv_cronjob;
+use db::load_tokens_from_db;
 use handlers::{
     handle_health, handle_reputest_get, handle_reputest_post, handle_root, handle_tweet,
 };
@@ -95,6 +97,12 @@ use handlers::{
 async fn main() {
     // Initialize the logging system
     env_logger::init();
+
+    // Load tokens from database and set as environment variables
+    if let Err(e) = load_tokens_from_db().await {
+        log::warn!("Failed to load tokens from database at startup: {}", e);
+        log::warn!("Continuing with existing environment variables (if any)");
+    }
 
     // Start the cronjob scheduler for GMGV hashtag monitoring
     let cronjob_handle = tokio::spawn(async {

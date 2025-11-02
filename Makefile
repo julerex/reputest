@@ -76,10 +76,24 @@ fly-login: ## Login to Fly
 fly-deploy: ## Deploy to Fly
 	fly deploy
 
+.PHONY: fly-status
+fly-status: ## Show Fly app status
+	fly status
+
+.PHONY: fly-machines-list
+fly-machines-list: ## Show Fly machines list
+   fly machines list
+
+# Bot targets ############################################################
+
 .PHONY: bot-auth
 bot-auth: ## Run Twitter bot authorization script
 	cargo run --bin authorize_bot
 
-.PHONY: bot-refresh
-bot-refresh: ## Refresh Twitter bot access token
+.PHONY: bot-refresh-access-token
+bot-refresh-access-token: ## Refresh Twitter bot access token
 	cargo run --bin refresh_token
+
+.PHONY: db-check
+	fly mpg connect
+	

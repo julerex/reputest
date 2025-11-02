@@ -4,7 +4,7 @@
 #
 
 app = 'reputest-small-violet-3860'
-primary_region = 'jnb'
+primary_region = 'fra'  # Change from 'jnb' to 'fra' for Frankfurt
 
 [build]
 

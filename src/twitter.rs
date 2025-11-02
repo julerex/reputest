@@ -201,7 +201,7 @@ pub async fn post_tweet(text: &str) -> Result<String, Box<dyn std::error::Error 
 
     // Load Twitter API credentials from environment variables
     info!("Loading Twitter configuration from environment variables");
-    let mut config = TwitterConfig::from_env()?;
+    let mut config = TwitterConfig::from_env().await?;
     debug!("Twitter config loaded successfully");
 
     let client = Client::new();
@@ -294,7 +294,7 @@ pub async fn search_tweets_with_hashtag(
 
     // Load Twitter API credentials from environment variables
     info!("Loading Twitter configuration from environment variables for search");
-    let mut config = TwitterConfig::from_env()?;
+    let mut config = TwitterConfig::from_env().await?;
     debug!("Twitter config loaded successfully for search");
     let client = Client::new();
 

@@ -212,7 +212,7 @@ The service includes OAuth 2.0 User Context authentication for Twitter/X API v2:
 
 ### Cronjob System
 
-Automated hashtag monitoring runs every 10 minutes:
+Automated hashtag monitoring runs every hour:
 
 - **GMGV Hashtag**: Searches for tweets containing #gmgv from the past hour
 - **Logging**: All found tweets are logged with timestamps and IDs

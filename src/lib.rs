@@ -29,6 +29,7 @@
 
 pub mod config;
 pub mod cronjob;
+pub mod db;
 pub mod handlers;
 pub mod oauth;
 pub mod twitter;

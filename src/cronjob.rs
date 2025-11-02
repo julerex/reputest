@@ -7,10 +7,10 @@ use crate::twitter::search_tweets_with_hashtag;
 use log::{error, info};
 use tokio_cron_scheduler::{Job, JobScheduler};
 
-/// Starts the cronjob scheduler for searching tweets with hashtag "gmgv" every 15 minutes.
+/// Starts the cronjob scheduler for searching tweets with hashtag "gmgv" every hour.
 ///
-/// This function creates a new job scheduler and adds a job that runs every 15 minutes
-/// to search for tweets containing the hashtag "gmgv" from the past 15 minutes. The job
+/// This function creates a new job scheduler and adds a job that runs every hour
+/// to search for tweets containing the hashtag "gmgv" from the past hour. The job
 /// will log all found tweets to the application logs.
 ///
 /// # Returns
@@ -20,10 +20,10 @@ use tokio_cron_scheduler::{Job, JobScheduler};
 ///
 /// # Job Schedule
 ///
-/// The job runs every 15 minutes using the cron expression "0 */15 * * * * *"
+/// The job runs every hour using the cron expression "0 0 * * * * *"
 /// which means:
 /// - 0 seconds
-/// - Every 15 minutes
+/// - 0 minutes
 /// - Every hour
 /// - Every day
 /// - Every month
@@ -54,9 +54,9 @@ pub async fn start_gmgv_cronjob() -> Result<JobScheduler, Box<dyn std::error::Er
 {
     let sched = JobScheduler::new().await?;
 
-    // Create a job that runs every 15 minutes
+    // Create a job that runs every hour
     sched
-        .add(Job::new_async("0 */15 * * * * *", |_uuid, _l| {
+        .add(Job::new_async("0 0 * * * * *", |_uuid, _l| {
             Box::pin(async {
                 info!("Starting scheduled search for #gmgv tweets");
                 match search_tweets_with_hashtag("gmgv").await {
@@ -71,7 +71,7 @@ pub async fn start_gmgv_cronjob() -> Result<JobScheduler, Box<dyn std::error::Er
         })?)
         .await?;
 
-    info!("Cronjob scheduler configured to search for #gmgv tweets every 15 minutes");
+    info!("Cronjob scheduler configured to search for #gmgv tweets every hour");
     Ok(sched)
 }
 
