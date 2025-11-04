@@ -92,6 +92,10 @@ bot-auth: ## Run Twitter bot authorization script
 bot-refresh-access-token: ## Refresh Twitter bot access token
 	cargo run --bin refresh_token
 
+.PHONY: bot-post-tweet
+bot-post-tweet: ## Post a tweet using interactive script
+	cargo run --bin post_tweet
+
 .PHONY: db-check
 db-check: ## Check database connection
 	fly mpg connect -d reputest

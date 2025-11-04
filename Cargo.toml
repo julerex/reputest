@@ -73,3 +73,8 @@ path = "scripts/authorize_bot.rs"
 [[bin]]
 name = "refresh_token"
 path = "scripts/refresh_access_token.rs"
+
+# Binary for posting tweets
+[[bin]]
+name = "post_tweet"
+path = "scripts/post_tweet.rs"
