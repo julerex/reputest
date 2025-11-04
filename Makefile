@@ -109,3 +109,6 @@ format: ## Format code
 .PHONY: clippy
 clippy: ## Run clippy
 	unset ARGV0 && cargo clippy --all-targets --all-features -- -D warnings
+
+.PHONY: checkall
+checkall: test format clippy ## Run all checks

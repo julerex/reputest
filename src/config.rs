@@ -43,11 +43,6 @@ impl TwitterConfig {
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         info!("Attempting to save refresh token to database");
 
-        // Ensure the table exists
-        if let Err(e) = db::create_refresh_tokens_table(pool).await {
-            warn!("Failed to ensure refresh_tokens table exists: {}", e);
-        }
-
         match db::save_refresh_token(pool, token).await {
             Ok(_) => {
                 info!("Successfully saved refresh token to database");
