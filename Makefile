@@ -94,7 +94,7 @@ bot-refresh-access-token: ## Refresh Twitter bot access token
 
 .PHONY: db-check
 db-check: ## Check database connection
-	fly mpg connect
+	fly mpg connect -d reputest
 
 # Test targets ############################################################
 

@@ -10,6 +10,7 @@ primary_region = 'fra'  # Change from 'jnb' to 'fra' for Frankfurt
 
 [env]
   PORT = '8080'
+  RUST_LOG = 'debug'
 
 [http_service]
   internal_port = 8080
