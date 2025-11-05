@@ -96,9 +96,13 @@ bot-refresh-access-token: ## Refresh Twitter bot access token
 bot-post-tweet: ## Post a tweet using interactive script
 	cargo run --bin post_tweet
 
-.PHONY: db-check
-db-check: ## Check database connection
+
+# Database targets ############################################################
+
+.PHONY: db-connect
+db-connect: ## Connect to database
 	fly mpg connect -d reputest
+
 
 # Test targets ############################################################
 

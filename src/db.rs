@@ -231,3 +231,100 @@ pub async fn save_access_token(
     info!("Successfully stored new access token in database");
     Ok(())
 }
+
+/// Stores good vibes data in the database.
+///
+/// This function inserts information about good vibes between users into the
+/// good_vibes table. It includes the tweet ID, emitter user ID, sensor user ID,
+/// and the timestamp when the good vibes were created.
+///
+/// # Parameters
+///
+/// - `pool`: A reference to the PostgreSQL connection pool
+/// - `tweet_id`: The ID of the tweet that contains the good vibes
+/// - `emitter_id`: The user ID of the person sending good vibes (emitter)
+/// - `sensor_id`: The user ID of the person receiving good vibes (sensor)
+/// - `created_at`: The timestamp when the tweet was created
+///
+/// # Returns
+///
+/// - `Ok(())`: If the vibes data was successfully stored
+/// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the insert fails
+pub async fn save_good_vibes(
+    pool: &PgPool,
+    tweet_id: &str,
+    emitter_id: &str,
+    sensor_id: &str,
+    created_at: chrono::DateTime<chrono::Utc>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    info!(
+        "Storing good vibes data in database: tweet {} from {} to {} at {}",
+        tweet_id, emitter_id, sensor_id, created_at
+    );
+
+    sqlx::query(
+        r#"
+        INSERT INTO good_vibes (tweet_id, emitter_id, sensor_id, created_at)
+        VALUES ($1, $2, $3, $4)
+        "#,
+    )
+    .bind(tweet_id)
+    .bind(emitter_id)
+    .bind(sensor_id)
+    .bind(created_at)
+    .execute(pool)
+    .await?;
+
+    info!("Successfully stored good vibes data in database");
+    Ok(())
+}
+
+/// Stores user data in the database.
+///
+/// This function inserts or updates user information in the users table.
+/// It uses ON CONFLICT to handle cases where the user already exists.
+///
+/// # Parameters
+///
+/// - `pool`: A reference to the PostgreSQL connection pool
+/// - `user_id`: The Twitter user ID
+/// - `username`: The Twitter username
+/// - `name`: The Twitter display name
+/// - `created_at`: The timestamp when the user account was created
+///
+/// # Returns
+///
+/// - `Ok(())`: If the user data was successfully stored
+/// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the insert/update fails
+pub async fn save_user(
+    pool: &PgPool,
+    user_id: &str,
+    username: &str,
+    name: &str,
+    created_at: chrono::DateTime<chrono::Utc>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    info!(
+        "Storing user data in database: {} (@{}) created at {}",
+        name, username, created_at
+    );
+
+    sqlx::query(
+        r#"
+        INSERT INTO users (id, username, name, created_at)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (id) DO UPDATE SET
+            username = EXCLUDED.username,
+            name = EXCLUDED.name,
+            created_at = EXCLUDED.created_at
+        "#,
+    )
+    .bind(user_id)
+    .bind(username)
+    .bind(name)
+    .bind(created_at)
+    .execute(pool)
+    .await?;
+
+    info!("Successfully stored user data in database");
+    Ok(())
+}

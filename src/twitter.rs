@@ -13,6 +13,93 @@ use crate::db;
 use crate::oauth::build_oauth2_user_context_header;
 use sqlx::PgPool;
 
+/// Extracts the first @mention username from a tweet text.
+///
+/// This function looks for @username patterns in the tweet text and returns
+/// the first username found (without the @ symbol). If no mentions are found,
+/// it returns None.
+///
+/// # Parameters
+///
+/// - `text`: The tweet text to search for mentions
+///
+/// # Returns
+///
+/// - `Some(username)`: The first mentioned username if found
+/// - `None`: If no mentions are found
+fn extract_first_mention(text: &str) -> Option<String> {
+    // Use regex to find @mentions (word characters after @)
+    let re = regex::Regex::new(r"@(\w+)").ok()?;
+    re.find(text)
+        .and_then(|mat| mat.as_str().strip_prefix('@'))
+        .map(|s| s.to_string())
+}
+
+/// Looks up a user by username using the Twitter API v2.
+///
+/// This function makes a request to the Twitter API to get user information
+/// by username, including their ID and other details.
+///
+/// # Parameters
+///
+/// - `config`: Mutable reference to TwitterConfig (may be updated with new token)
+/// - `pool`: A reference to the PostgreSQL connection pool
+/// - `username`: The Twitter username to look up
+///
+/// # Returns
+///
+/// - `Ok(Some((user_id, name, created_at)))`: User information if found
+/// - `Ok(None)`: If user not found
+/// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the API request fails
+async fn lookup_user_by_username(
+    config: &mut TwitterConfig,
+    pool: &PgPool,
+    username: &str,
+) -> Result<
+    Option<(String, String, chrono::DateTime<chrono::Utc>)>,
+    Box<dyn std::error::Error + Send + Sync>,
+> {
+    info!("Looking up user by username: {}", username);
+
+    let client = Client::new();
+    let url = format!(
+        "https://api.x.com/2/users/by/username/{}?user.fields=id,name,username,created_at",
+        username
+    );
+
+    let auth_header = build_oauth2_user_context_header(&config.access_token);
+    let request_builder = client.get(&url).header("Authorization", auth_header);
+
+    let response_text =
+        make_authenticated_request(config, pool, request_builder, "lookup_user").await?;
+    let json_response: serde_json::Value = serde_json::from_str(&response_text)?;
+
+    if let Some(data) = json_response.get("data") {
+        if let (Some(id), Some(name), Some(created_at_str)) = (
+            data.get("id").and_then(|v| v.as_str()),
+            data.get("name").and_then(|v| v.as_str()),
+            data.get("created_at").and_then(|v| v.as_str()),
+        ) {
+            match chrono::DateTime::parse_from_rfc3339(created_at_str) {
+                Ok(dt) => {
+                    let created_at_utc = dt.with_timezone(&chrono::Utc);
+                    info!("Found user {}: {} (@{})", id, name, username);
+                    return Ok(Some((id.to_string(), name.to_string(), created_at_utc)));
+                }
+                Err(e) => {
+                    error!(
+                        "Failed to parse user created_at '{}': {}",
+                        created_at_str, e
+                    );
+                }
+            }
+        }
+    }
+
+    warn!("User {} not found", username);
+    Ok(None)
+}
+
 /// Makes an authenticated request to the Twitter API with automatic token refresh on 401 errors.
 ///
 /// This helper function handles the common pattern of making authenticated requests to the Twitter API
@@ -244,12 +331,12 @@ pub async fn post_tweet(text: &str) -> Result<String, Box<dyn std::error::Error 
     make_authenticated_request(&mut config, &pool, request_builder, "post_tweet").await
 }
 
-/// Searches for tweets with a specific hashtag in the past hour.
+/// Searches for tweets with a specific hashtag in the past 7 days and saves good vibes data.
 ///
 /// This function uses the Twitter API v2 search endpoint to find tweets containing
-/// the specified hashtag that were posted within the last hour. It uses OAuth 2.0
-/// User Context Access Token authentication for v2 endpoints. It logs all found
-/// tweets to the application logs.
+/// the specified hashtag that were posted within the past 7 days. It extracts vibe
+/// emitter (poster) and vibe receiver (mentioned user) information and saves it
+/// to the database. It uses OAuth 2.0 User Context Access Token authentication for v2 endpoints.
 ///
 /// # Parameters
 ///
@@ -259,6 +346,11 @@ pub async fn post_tweet(text: &str) -> Result<String, Box<dyn std::error::Error 
 ///
 /// - `Ok(())`: If the search completed successfully (regardless of results)
 /// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If authentication fails, network error, or API error
+///
+/// # Database Operations
+///
+/// This function saves good vibes data to the `good_vibes` table for each tweet that contains
+/// a user mention. The mentioned user becomes the vibe_emitter and the poster becomes the vibe_receiver.
 ///
 /// # Requirements
 ///
@@ -308,20 +400,20 @@ pub async fn search_tweets_with_hashtag(
     debug!("Twitter config loaded successfully for search");
     let client = Client::new();
 
-    // Calculate the timestamp for 1 hour ago
-    let one_hour_ago = SystemTime::now()
+    // Calculate the timestamp for 7 days ago
+    let seven_days_ago = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs()
-        - 3600; // 3600 seconds = 1 hour
+        - 604800; // 604800 seconds = 7 days
 
     // Build the search query with hashtag and time filter
     let query = format!("#{}", hashtag);
-    let start_time = chrono::DateTime::from_timestamp(one_hour_ago as i64, 0)
+    let start_time = chrono::DateTime::from_timestamp(seven_days_ago as i64, 0)
         .unwrap()
         .format("%Y-%m-%dT%H:%M:%S.000Z");
     let url = format!(
-        "https://api.x.com/2/tweets/search/recent?query={}&start_time={}&max_results=100",
+        "https://api.x.com/2/tweets/search/recent?query={}&start_time={}&max_results=100&expansions=author_id&user.fields=id,username,name,created_at",
         urlencoding::encode(&query),
         start_time
     );
@@ -349,21 +441,183 @@ pub async fn search_tweets_with_hashtag(
     debug!("Search response body: {}", response_text);
     let json_response: serde_json::Value = serde_json::from_str(&response_text)?;
 
+    // Create maps of user ID to user info for quick lookup
+    let mut users_username_map = std::collections::HashMap::new();
+    let mut users_name_map = std::collections::HashMap::new();
+    let mut users_created_at_map = std::collections::HashMap::new();
+    if let Some(includes) = json_response.get("includes") {
+        if let Some(users) = includes.get("users") {
+            if let Some(users_array) = users.as_array() {
+                for user in users_array {
+                    if let (Some(id), Some(username), Some(name), Some(created_at_str)) = (
+                        user.get("id"),
+                        user.get("username"),
+                        user.get("name"),
+                        user.get("created_at"),
+                    ) {
+                        if let (
+                            Some(id_str),
+                            Some(username_str),
+                            Some(name_str),
+                            Some(created_at_str),
+                        ) = (
+                            id.as_str(),
+                            username.as_str(),
+                            name.as_str(),
+                            created_at_str.as_str(),
+                        ) {
+                            users_username_map.insert(id_str.to_string(), username_str.to_string());
+                            users_name_map.insert(id_str.to_string(), name_str.to_string());
+
+                            // Parse and store created_at timestamp
+                            match chrono::DateTime::parse_from_rfc3339(created_at_str) {
+                                Ok(dt) => {
+                                    let created_at_utc = dt.with_timezone(&chrono::Utc);
+                                    users_created_at_map.insert(id_str.to_string(), created_at_utc);
+
+                                    // Save user data to database
+                                    if let Err(e) = crate::db::save_user(
+                                        &pool,
+                                        id_str,
+                                        username_str,
+                                        name_str,
+                                        created_at_utc,
+                                    )
+                                    .await
+                                    {
+                                        error!(
+                                            "Failed to save user data for {}: {}",
+                                            username_str, e
+                                        );
+                                    }
+                                }
+                                Err(e) => {
+                                    error!(
+                                        "Failed to parse user created_at '{}': {}",
+                                        created_at_str, e
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Extract tweets from the response
     if let Some(data) = json_response.get("data") {
         if let Some(tweets) = data.as_array() {
             if tweets.is_empty() {
-                info!("No tweets found with hashtag #{} in the past hour", hashtag);
+                info!(
+                    "No tweets found with hashtag #{} in the past 7 days",
+                    hashtag
+                );
             } else {
                 info!(
-                    "Found {} tweets with hashtag #{} in the past hour:",
+                    "Found {} tweets with hashtag #{} in the past 7 days:",
                     tweets.len(),
                     hashtag
                 );
                 for (i, tweet) in tweets.iter().enumerate() {
                     if let Some(text) = tweet.get("text") {
                         if let Some(id) = tweet.get("id") {
+                            // Extract created_at timestamp
+                            let created_at_str = tweet.get("created_at").and_then(|v| v.as_str());
+                            let created_at = if let Some(created_at_str) = created_at_str {
+                                // Parse ISO 8601 timestamp from Twitter API
+                                match chrono::DateTime::parse_from_rfc3339(created_at_str) {
+                                    Ok(dt) => dt.with_timezone(&chrono::Utc),
+                                    Err(e) => {
+                                        error!(
+                                            "Failed to parse created_at '{}': {}",
+                                            created_at_str, e
+                                        );
+                                        continue;
+                                    }
+                                }
+                            } else {
+                                error!("Tweet {} missing created_at field", id);
+                                continue;
+                            };
+
                             info!("Tweet {} (ID: {}): {}", i + 1, id, text);
+
+                            // Extract poster information
+                            let poster_user_id = tweet.get("author_id").and_then(|v| v.as_str());
+                            let poster_username =
+                                poster_user_id.and_then(|user_id| users_username_map.get(user_id));
+                            let poster_name =
+                                poster_user_id.and_then(|user_id| users_name_map.get(user_id));
+
+                            // Extract vibe_emitter from @mentions in tweet text
+                            let vibe_emitter_username =
+                                extract_first_mention(text.as_str().unwrap_or(""));
+
+                            if let (
+                                Some(poster_id),
+                                Some(poster_username),
+                                Some(poster_display_name),
+                            ) = (poster_user_id, poster_username, poster_name)
+                            {
+                                if let Some(vibe_emitter_username) = &vibe_emitter_username {
+                                    info!(
+                                        "  Poster (vibe receiver): {} (@{})",
+                                        poster_display_name, poster_username
+                                    );
+                                    info!("  Vibe emitter: {}", vibe_emitter_username);
+
+                                    // Look up the emitter user by username
+                                    match lookup_user_by_username(
+                                        &mut config,
+                                        &pool,
+                                        vibe_emitter_username,
+                                    )
+                                    .await
+                                    {
+                                        Ok(Some((
+                                            emitter_user_id,
+                                            emitter_name,
+                                            emitter_created_at,
+                                        ))) => {
+                                            // Save emitter user data
+                                            if let Err(e) = crate::db::save_user(
+                                                &pool,
+                                                &emitter_user_id,
+                                                vibe_emitter_username,
+                                                &emitter_name,
+                                                emitter_created_at,
+                                            )
+                                            .await
+                                            {
+                                                error!("Failed to save emitter user data: {}", e);
+                                            }
+
+                                            // Save good vibes data
+                                            if let Err(e) = crate::db::save_good_vibes(
+                                                &pool,
+                                                id.as_str().unwrap(), // tweet_id
+                                                &emitter_user_id, // emitter_id (person who sent good vibes)
+                                                poster_id, // sensor_id (person who received good vibes)
+                                                created_at, // created_at from tweet
+                                            )
+                                            .await
+                                            {
+                                                error!("Failed to save good vibes data: {}", e);
+                                            }
+                                        }
+                                        Ok(None) => {
+                                            warn!("Emitter user {} not found, skipping good vibes save", vibe_emitter_username);
+                                        }
+                                        Err(e) => {
+                                            error!(
+                                                "Failed to lookup emitter user {}: {}",
+                                                vibe_emitter_username, e
+                                            );
+                                        }
+                                    }
+                                }
+                            }
                         } else {
                             info!("Tweet {}: {}", i + 1, text);
                         }
@@ -374,7 +628,10 @@ pub async fn search_tweets_with_hashtag(
             warn!("Unexpected response format: data is not an array");
         }
     } else {
-        info!("No tweets found with hashtag #{} in the past hour", hashtag);
+        info!(
+            "No tweets found with hashtag #{} in the past 7 days",
+            hashtag
+        );
     }
 
     Ok(())

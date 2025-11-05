@@ -44,6 +44,8 @@ base64 = "0.21"
 url = "2.4"
 # PostgreSQL async driver with runtime support
 sqlx = { version = "0.8", features = ["runtime-tokio-native-tls", "postgres", "chrono", "uuid"] }
+# Regular expressions for text parsing
+regex = "1.10"
 
 [dev-dependencies]
 # Testing utilities for async code

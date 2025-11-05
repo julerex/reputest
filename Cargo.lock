@@ -1538,6 +1538,7 @@ dependencies = [
  "http-body-util",
  "log",
  "rand",
+ "regex",
  "reqwest",
  "serde",
  "serde_json",
