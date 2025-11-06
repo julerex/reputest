@@ -2,12 +2,6 @@
 /target/
 **/*.rs.bk
 
-# Azure Functions
-bin
-obj
-appsettings.json
-local.settings.json
-.azure/
 
 # IDE
 .vscode/
@@ -22,3 +16,4 @@ Thumbs.db
 
 # Logs
 *.log
+scratchpad.txt

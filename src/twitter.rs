@@ -413,7 +413,7 @@ pub async fn search_tweets_with_hashtag(
         .unwrap()
         .format("%Y-%m-%dT%H:%M:%S.000Z");
     let url = format!(
-        "https://api.x.com/2/tweets/search/recent?query={}&start_time={}&max_results=100&expansions=author_id&user.fields=id,username,name,created_at",
+        "https://api.x.com/2/tweets/search/recent?query={}&start_time={}&max_results=100&expansions=author_id&user.fields=id,username,name,created_at&tweet.fields=created_at",
         urlencoding::encode(&query),
         start_time
     );
