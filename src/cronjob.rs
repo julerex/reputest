@@ -1,17 +1,21 @@
 //! Cronjob module for scheduled tasks.
 //!
 //! This module contains functionality for running scheduled tasks, specifically
-//! for searching Twitter for tweets with specific hashtags at regular intervals.
+//! for searching Twitter for tweets with specific hashtags and checking for mentions.
 
-use crate::twitter::search_tweets_with_hashtag;
+use crate::db::get_good_vibes_count;
+use crate::twitter::{reply_to_tweet, search_mentions, search_tweets_with_hashtag};
 use log::{error, info};
 use tokio_cron_scheduler::{Job, JobScheduler};
 
-/// Starts the cronjob scheduler for searching tweets with hashtag "gmgv" every hour.
+/// Starts the cronjob scheduler for searching tweets with hashtag "gmgv" and checking mentions every hour.
 ///
 /// This function creates a new job scheduler and adds a job that runs every hour
-/// to search for tweets containing the hashtag "gmgv" from the past hour. The job
-/// will log all found tweets to the application logs.
+/// to perform two tasks:
+/// 1. Search for tweets containing the hashtag "gmgv" from the past 7 days
+/// 2. Check for mentions of @reputest from the past hour and reply with good vibes count
+///
+/// The job will log all found tweets and mentions to the application logs.
 ///
 /// # Returns
 ///
@@ -58,6 +62,7 @@ pub async fn start_gmgv_cronjob() -> Result<JobScheduler, Box<dyn std::error::Er
     sched
         .add(Job::new_async("0 0 * * * * *", |_uuid, _l| {
             Box::pin(async {
+                // Task 1: Search for #gmgv tweets
                 info!("Starting scheduled search for #gmgv tweets");
                 match search_tweets_with_hashtag("gmgv").await {
                     Ok(_) => {
@@ -67,18 +72,79 @@ pub async fn start_gmgv_cronjob() -> Result<JobScheduler, Box<dyn std::error::Er
                         error!("Scheduled search for #gmgv tweets failed: {}", e);
                     }
                 }
+
+                // Task 2: Check for mentions and reply with good vibes count
+                info!("Starting scheduled check for @reputest mentions");
+                match search_mentions().await {
+                    Ok(mentions) => {
+                        if mentions.is_empty() {
+                            info!("No mentions found to reply to");
+                        } else {
+                            info!("Found {} mentions to reply to", mentions.len());
+
+                            // Get the current good vibes count
+                            let pool = match crate::db::get_db_pool().await {
+                                Ok(pool) => pool,
+                                Err(e) => {
+                                    error!(
+                                        "Failed to get database pool for good vibes count: {}",
+                                        e
+                                    );
+                                    return;
+                                }
+                            };
+
+                            let vibes_count = match get_good_vibes_count(&pool).await {
+                                Ok(count) => count,
+                                Err(e) => {
+                                    error!("Failed to get good vibes count: {}", e);
+                                    return;
+                                }
+                            };
+
+                            // Reply to each mention
+                            for (tweet_id, _tweet_text, author_username) in mentions {
+                                let reply_text = format!(
+                                    "Hello @{}! The current good vibes count is: {}",
+                                    author_username, vibes_count
+                                );
+                                info!("Replying to tweet {} with: {}", tweet_id, reply_text);
+
+                                match reply_to_tweet(&reply_text, &tweet_id).await {
+                                    Ok(_) => {
+                                        info!(
+                                            "Successfully replied to mention from @{}",
+                                            author_username
+                                        );
+                                    }
+                                    Err(e) => {
+                                        error!(
+                                            "Failed to reply to mention from @{}: {}",
+                                            author_username, e
+                                        );
+                                    }
+                                }
+                            }
+
+                            info!("Scheduled check for mentions completed successfully");
+                        }
+                    }
+                    Err(e) => {
+                        error!("Scheduled check for mentions failed: {}", e);
+                    }
+                }
             })
         })?)
         .await?;
 
-    info!("Cronjob scheduler configured to search for #gmgv tweets every hour");
+    info!("Cronjob scheduler configured to search for #gmgv tweets and check mentions every hour");
     Ok(sched)
 }
 
 /// Starts the cronjob scheduler and keeps it running.
 ///
-/// This is a convenience function that starts the GMGV hashtag search cronjob
-/// and keeps the scheduler running indefinitely. It handles graceful shutdown
+/// This is a convenience function that starts the GMGV hashtag search and mentions
+/// checking cronjob and keeps the scheduler running indefinitely. It handles graceful shutdown
 /// when receiving a Ctrl+C signal.
 ///
 /// # Returns

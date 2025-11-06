@@ -331,6 +331,78 @@ pub async fn post_tweet(text: &str) -> Result<String, Box<dyn std::error::Error 
     make_authenticated_request(&mut config, &pool, request_builder, "post_tweet").await
 }
 
+/// Replies to a tweet using the Twitter/X API v2 endpoint.
+///
+/// This function posts a reply to an existing tweet by including the `reply` parameter
+/// in the tweet payload. It uses OAuth 2.0 User Context authentication.
+///
+/// # Parameters
+///
+/// - `text`: The text content of the reply tweet
+/// - `reply_to_tweet_id`: The ID of the tweet to reply to
+///
+/// # Returns
+///
+/// - `Ok(String)`: The API response body on successful reply posting
+/// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If authentication fails, network error, or API error
+///
+/// # Requirements
+///
+/// The following must be available:
+/// - Database connection (DATABASE_URL environment variable)
+/// - Access token in the `access_tokens` table (OAuth 2.0 User Context Access Token for posting tweets)
+pub async fn reply_to_tweet(
+    text: &str,
+    reply_to_tweet_id: &str,
+) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    info!(
+        "Starting reply operation to tweet {} with text: '{}'",
+        reply_to_tweet_id, text
+    );
+
+    // Get database pool and load Twitter API credentials from database
+    info!("Loading Twitter configuration from database");
+    let pool = db::get_db_pool().await?;
+    let mut config = TwitterConfig::from_env(&pool).await?;
+    debug!("Twitter config loaded successfully");
+
+    let client = Client::new();
+    let url = "https://api.x.com/2/tweets";
+    info!("Target URL: {}", url);
+
+    // Create the reply payload
+    let payload = json!({
+        "text": text,
+        "reply": {
+            "in_reply_to_tweet_id": reply_to_tweet_id
+        }
+    });
+    debug!("Reply payload: {}", serde_json::to_string_pretty(&payload)?);
+
+    // Build the Authorization header with OAuth 2.0 User Context Access Token
+    info!("Building OAuth 2.0 User Context authorization header");
+    let auth_header = build_oauth2_user_context_header(&config.access_token);
+
+    // Log request details
+    info!("Sending POST request to Twitter API v2 for reply");
+    debug!("Request URL: {}", url);
+    debug!("Request headers: Authorization: Bearer [REDACTED], Content-Type: application/json");
+    debug!(
+        "Request payload: {}",
+        serde_json::to_string_pretty(&payload)?
+    );
+
+    // Create the request builder
+    let request_builder = client
+        .post(url)
+        .header("Authorization", auth_header)
+        .header("Content-Type", "application/json")
+        .json(&payload);
+
+    // Use the authenticated request helper with automatic token refresh
+    make_authenticated_request(&mut config, &pool, request_builder, "reply_to_tweet").await
+}
+
 /// Searches for tweets with a specific hashtag in the past 7 days and saves good vibes data.
 ///
 /// This function uses the Twitter API v2 search endpoint to find tweets containing
@@ -635,4 +707,137 @@ pub async fn search_tweets_with_hashtag(
     }
 
     Ok(())
+}
+
+/// Searches for mentions of the reputest user in the past hour and returns tweet information.
+///
+/// This function uses the Twitter API v2 search endpoint to find tweets that mention
+/// @reputest and were posted within the past hour. It returns a vector of tuples containing
+/// tweet ID, tweet text, and author username for each mention found.
+///
+/// # Returns
+///
+/// - `Ok(Vec<(String, String, String)>)`: Vector of (tweet_id, tweet_text, author_username) tuples
+/// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If authentication fails, network error, or API error
+///
+/// # Requirements
+///
+/// The following must be available:
+/// - Database connection (DATABASE_URL environment variable)
+/// - Access token in the `access_tokens` table (OAuth 2.0 User Context Access Token for searching tweets)
+pub async fn search_mentions(
+) -> Result<Vec<(String, String, String)>, Box<dyn std::error::Error + Send + Sync>> {
+    info!("Starting search for @reputest mentions in the past hour");
+
+    // Get database pool and load Twitter API credentials from database
+    info!("Loading Twitter configuration from database for mentions search");
+    let pool = db::get_db_pool().await?;
+    let mut config = TwitterConfig::from_env(&pool).await?;
+    debug!("Twitter config loaded successfully for mentions search");
+
+    let client = Client::new();
+
+    // Calculate the timestamp for 1 hour ago
+    let one_hour_ago = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+        - 3600; // 3600 seconds = 1 hour
+
+    // Build the search query for mentions of @reputest
+    let query = "@reputest";
+    let start_time = chrono::DateTime::from_timestamp(one_hour_ago as i64, 0)
+        .unwrap()
+        .format("%Y-%m-%dT%H:%M:%S.000Z");
+    let url = format!(
+        "https://api.x.com/2/tweets/search/recent?query={}&start_time={}&max_results=100&expansions=author_id&user.fields=id,username,name&tweet.fields=created_at,author_id",
+        urlencoding::encode(query),
+        start_time
+    );
+
+    info!("Mentions search URL: {}", url);
+    debug!("Search query: {}", query);
+    debug!("Start time: {}", start_time);
+
+    // Build the Authorization header with OAuth 2.0 User Context Access Token
+    info!("Building OAuth 2.0 User Context authorization header for mentions search");
+    let auth_header = build_oauth2_user_context_header(&config.access_token);
+
+    // Log request details
+    info!("Sending GET request to Twitter API v2 search endpoint for mentions");
+    debug!("Request URL: {}", url);
+    debug!("Request headers: Authorization: Bearer [REDACTED]");
+
+    // Create the request builder
+    let request_builder = client.get(&url).header("Authorization", auth_header);
+
+    // Use the authenticated request helper with automatic token refresh
+    let response_text =
+        make_authenticated_request(&mut config, &pool, request_builder, "search_mentions").await?;
+
+    debug!("Mentions search response body: {}", response_text);
+    let json_response: serde_json::Value = serde_json::from_str(&response_text)?;
+
+    // Create a map of user ID to username for quick lookup
+    let mut users_username_map = std::collections::HashMap::new();
+    if let Some(includes) = json_response.get("includes") {
+        if let Some(users) = includes.get("users") {
+            if let Some(users_array) = users.as_array() {
+                for user in users_array {
+                    if let (Some(id), Some(username)) = (
+                        user.get("id").and_then(|v| v.as_str()),
+                        user.get("username").and_then(|v| v.as_str()),
+                    ) {
+                        users_username_map.insert(id.to_string(), username.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    // Extract tweets from the response
+    let mut mentions = Vec::new();
+    if let Some(data) = json_response.get("data") {
+        if let Some(tweets) = data.as_array() {
+            if tweets.is_empty() {
+                info!("No mentions of @reputest found in the past hour");
+            } else {
+                info!(
+                    "Found {} mentions of @reputest in the past hour:",
+                    tweets.len()
+                );
+                for (i, tweet) in tweets.iter().enumerate() {
+                    if let (Some(text), Some(id), Some(author_id)) = (
+                        tweet.get("text").and_then(|v| v.as_str()),
+                        tweet.get("id").and_then(|v| v.as_str()),
+                        tweet.get("author_id").and_then(|v| v.as_str()),
+                    ) {
+                        let author_username = users_username_map
+                            .get(author_id)
+                            .map(|s| s.as_str())
+                            .unwrap_or("unknown");
+
+                        info!(
+                            "Mention {} (ID: {}): {} by @{}",
+                            i + 1,
+                            id,
+                            text,
+                            author_username
+                        );
+                        mentions.push((
+                            id.to_string(),
+                            text.to_string(),
+                            author_username.to_string(),
+                        ));
+                    }
+                }
+            }
+        } else {
+            info!("No mentions of @reputest found in the past hour");
+        }
+    } else {
+        info!("No mentions of @reputest found in the past hour");
+    }
+
+    Ok(mentions)
 }

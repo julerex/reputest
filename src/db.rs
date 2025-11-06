@@ -328,3 +328,33 @@ pub async fn save_user(
     info!("Successfully stored user data in database");
     Ok(())
 }
+
+/// Retrieves the count of good vibes records from the database.
+///
+/// This function queries the good_vibes table and returns the total count of records.
+///
+/// # Parameters
+///
+/// - `pool`: A reference to the PostgreSQL connection pool
+///
+/// # Returns
+///
+/// - `Ok(i64)`: The count of good vibes records
+/// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the query fails
+pub async fn get_good_vibes_count(
+    pool: &PgPool,
+) -> Result<i64, Box<dyn std::error::Error + Send + Sync>> {
+    info!("Querying database for good vibes count");
+
+    let count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT COUNT(*) as count
+        FROM good_vibes
+        "#,
+    )
+    .fetch_one(pool)
+    .await?;
+
+    info!("Found {} good vibes records in database", count);
+    Ok(count)
+}
