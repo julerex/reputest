@@ -53,7 +53,8 @@ pub fn extract_mention_with_question(text: &str) -> Option<String> {
     // First try to match @username? or @username ? patterns (with @ symbol)
     let re_with_at = regex::Regex::new(r"@(\w+)\s*\?").ok()?;
     if let Some(mat) = re_with_at.find(text) {
-        return mat.as_str()
+        return mat
+            .as_str()
             .strip_prefix('@')
             .and_then(|s| s.strip_suffix('?'))
             .map(|s| s.trim().to_string());
@@ -72,12 +73,17 @@ pub fn extract_mention_with_question(text: &str) -> Option<String> {
             continue;
         }
 
-        let username = mat.as_str()
+        let username = mat
+            .as_str()
             .strip_suffix('?')
             .map(|s| s.trim().to_string())?;
 
         // Exclude common words that might be followed by ? to avoid false positives
-        let excluded_words = ["what", "when", "where", "how", "why", "who", "which", "the", "a", "an", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "do", "does", "did", "will", "would", "could", "should", "can", "may", "might", "must", "shall", "reputest"];
+        let excluded_words = [
+            "what", "when", "where", "how", "why", "who", "which", "the", "a", "an", "is", "are",
+            "was", "were", "be", "been", "being", "have", "has", "had", "do", "does", "did",
+            "will", "would", "could", "should", "can", "may", "might", "must", "shall", "reputest",
+        ];
         if !excluded_words.contains(&username.to_lowercase().as_str()) {
             valid_username = Some(username);
         }

@@ -461,7 +461,10 @@ pub async fn has_vibe_request(
     pool: &PgPool,
     tweet_id: &str,
 ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
-    info!("Checking if tweet {} has been processed for vibe request", tweet_id);
+    info!(
+        "Checking if tweet {} has been processed for vibe request",
+        tweet_id
+    );
 
     let exists: bool = sqlx::query_scalar(
         r#"
@@ -512,6 +515,9 @@ pub async fn save_vibe_request(
     .execute(pool)
     .await?;
 
-    info!("Successfully stored vibe request for tweet {} in database", tweet_id);
+    info!(
+        "Successfully stored vibe request for tweet {} in database",
+        tweet_id
+    );
     Ok(())
 }

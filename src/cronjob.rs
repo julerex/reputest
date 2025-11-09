@@ -3,7 +3,10 @@
 //! This module contains functionality for running scheduled tasks, specifically
 //! for searching Twitter for tweets with specific hashtags and checking for mentions.
 
-use crate::db::{get_good_vibes_count, get_user_id_by_username, has_good_vibes_record, has_vibe_request, save_vibe_request};
+use crate::db::{
+    get_good_vibes_count, get_user_id_by_username, has_good_vibes_record, has_vibe_request,
+    save_vibe_request,
+};
 use crate::twitter::{reply_to_tweet, search_mentions, search_tweets_with_hashtag};
 use log::{error, info};
 use tokio_cron_scheduler::{Job, JobScheduler};

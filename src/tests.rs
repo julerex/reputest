@@ -308,7 +308,10 @@ fn test_extract_mention_with_question() {
     assert_eq!(extract_mention_with_question("@reputest hello"), None);
 
     // Test case with a word followed by ? (should match if it's not excluded)
-    assert_eq!(extract_mention_with_question("@reputest hello ?"), Some("hello".to_string()));
+    assert_eq!(
+        extract_mention_with_question("@reputest hello ?"),
+        Some("hello".to_string())
+    );
 
     // Test case with only the bot mention
     assert_eq!(extract_mention_with_question("@reputest"), None);
