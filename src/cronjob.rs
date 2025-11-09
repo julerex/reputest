@@ -188,6 +188,21 @@ pub async fn start_gmgv_cronjob() -> Result<JobScheduler, Box<dyn std::error::Er
                                 } else {
                                     // Check if the mention contains "vibecount" (case insensitive)
                                     if tweet_text.to_lowercase().contains("vibecount") {
+                                        // First, check if this tweet has already been processed
+                                        match has_vibe_request(&pool, &tweet_id).await {
+                                            Ok(true) => {
+                                                info!("Skipping vibecount request tweet {} - already processed", tweet_id);
+                                                continue;
+                                            }
+                                            Ok(false) => {
+                                                // Tweet not processed yet, proceed with normal logic
+                                            }
+                                            Err(e) => {
+                                                error!("Failed to check if vibecount tweet {} has been processed: {}", tweet_id, e);
+                                                continue;
+                                            }
+                                        }
+
                                         // Reply with total vibes count
                                         match get_good_vibes_count(&pool).await {
                                             Ok(vibes_count) => {
@@ -197,6 +212,10 @@ pub async fn start_gmgv_cronjob() -> Result<JobScheduler, Box<dyn std::error::Er
                                                 match reply_to_tweet(&reply_text, &tweet_id).await {
                                                     Ok(_) => {
                                                         info!("Successfully replied to vibecount request from @{}", author_username);
+                                                        // Mark this tweet as processed
+                                                        if let Err(e) = save_vibe_request(&pool, &tweet_id).await {
+                                                            error!("Failed to save vibe request for tweet {}: {}", tweet_id, e);
+                                                        }
                                                     }
                                                     Err(e) => {
                                                         error!("Failed to reply to vibecount request from @{}: {}", author_username, e);
