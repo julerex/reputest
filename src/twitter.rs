@@ -507,15 +507,6 @@ pub async fn search_tweets_with_hashtag(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     info!("Starting tweet search operation for hashtag: '{}'", hashtag);
 
-    // Post a tweet with "loggerman <TIME>"
-    let current_time = chrono::Utc::now().format("%H:%M:%S");
-    let tweet_text = format!("loggerman {}", current_time);
-    info!("Posting test tweet with '{}'", tweet_text);
-    match post_tweet(&tweet_text).await {
-        Ok(response) => info!("Posted 'loggerman' tweet successfully: {}", response),
-        Err(e) => error!("Failed to post 'loggerman' tweet: {}", e),
-    }
-
     // Get database pool and load Twitter API credentials from database
     info!("Loading Twitter configuration from database for search");
     let pool = db::get_db_pool().await?;
