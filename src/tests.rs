@@ -22,6 +22,10 @@
 
 use crate::{
     config::get_server_port,
+    db::{
+        get_db_pool, get_vibe_score_one, get_vibe_score_three, get_vibe_score_two, save_good_vibes,
+        save_user,
+    },
     handlers::{
         handle_health, handle_reputest_get, handle_reputest_post, handle_root, handle_tweet,
     },
@@ -34,6 +38,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use chrono::Utc;
 use http_body_util::BodyExt;
 use serde_json::Value;
 use tower::ServiceExt;
@@ -320,4 +325,201 @@ fn test_extract_mention_with_question() {
     assert_eq!(extract_mention_with_question("@reputest what?"), None);
     assert_eq!(extract_mention_with_question("@reputest why?"), None);
     assert_eq!(extract_mention_with_question("@reputest reputest?"), None);
+}
+
+/// Integration test for the pagerank-style vibe scoring algorithm.
+///
+/// This test verifies that the three-degree vibe scoring works correctly by:
+/// 1. Setting up test users (Alice, Bob, Charlie, Danielle, Edgar, David, Frank)
+/// 2. Creating good vibes relationships: Alice->Bob, Bob->Charlie, Bob->Danielle, Alice->Edgar, Edgar->Charlie, Charlie->Frank
+/// 3. Testing various vibe score calculations for all three degrees
+///
+/// Expected results:
+/// - 1st degree (direct): Alice to Bob = 1, Alice to Edgar = 1, Bob to Charlie = 1
+/// - 2nd degree (paths of length 2): Alice to Charlie = 2 (Bob->Charlie + Edgar->Charlie), Alice to Danielle = 1 (Bob->Danielle)
+/// - 3rd degree (paths of length 3): Alice to Frank = 2 (Bob->Charlie->Frank + Edgar->Charlie->Frank)
+/// - No connections: Charlie to Alice = 0, Alice to David = 0, Same user = 0
+#[tokio::test]
+async fn test_pagerank_vibe_scoring() {
+    // Skip test if DATABASE_URL is not set
+    if std::env::var("DATABASE_URL").is_err() {
+        println!("Skipping pagerank test - DATABASE_URL not set");
+        return;
+    }
+
+    let pool = match get_db_pool().await {
+        Ok(pool) => pool,
+        Err(_) => {
+            println!("Skipping pagerank test - could not connect to database");
+            return;
+        }
+    };
+
+    let now = Utc::now();
+
+    // Create test users
+    let alice_id = "alice_test_123";
+    let bob_id = "bob_test_456";
+    let charlie_id = "charlie_test_789";
+    let danielle_id = "danielle_test_000";
+    let edgar_id = "edgar_test_111";
+    let frank_id = "frank_test_222";
+    let david_id = "david_test_999";
+
+    // Save test users
+    save_user(&pool, alice_id, "alice", "Alice Test", now)
+        .await
+        .unwrap();
+    save_user(&pool, bob_id, "bob", "Bob Test", now)
+        .await
+        .unwrap();
+    save_user(&pool, charlie_id, "charlie", "Charlie Test", now)
+        .await
+        .unwrap();
+    save_user(&pool, danielle_id, "danielle", "Danielle Test", now)
+        .await
+        .unwrap();
+    save_user(&pool, edgar_id, "edgar", "Edgar Test", now)
+        .await
+        .unwrap();
+    save_user(&pool, frank_id, "frank", "Frank Test", now)
+        .await
+        .unwrap();
+    save_user(&pool, david_id, "david", "David Test", now)
+        .await
+        .unwrap();
+
+    // Create good vibes relationships: Alice->Bob, Bob->Charlie, Bob->Danielle, Alice->Edgar, Edgar->Charlie, Charlie->Frank
+    save_good_vibes(&pool, "tweet_alice_bob", alice_id, bob_id, now)
+        .await
+        .unwrap();
+    save_good_vibes(&pool, "tweet_bob_charlie", bob_id, charlie_id, now)
+        .await
+        .unwrap();
+    save_good_vibes(&pool, "tweet_bob_danielle", bob_id, danielle_id, now)
+        .await
+        .unwrap();
+    save_good_vibes(&pool, "tweet_alice_edgar", alice_id, edgar_id, now)
+        .await
+        .unwrap();
+    save_good_vibes(&pool, "tweet_edgar_charlie", edgar_id, charlie_id, now)
+        .await
+        .unwrap();
+    save_good_vibes(&pool, "tweet_charlie_frank", charlie_id, frank_id, now)
+        .await
+        .unwrap();
+
+    // Test first-degree connections (direct)
+    assert_eq!(
+        get_vibe_score_one(&pool, alice_id, bob_id).await.unwrap(),
+        1,
+        "Alice should have 1st-degree vibe score 1 for Bob (direct)"
+    );
+    assert_eq!(
+        get_vibe_score_one(&pool, alice_id, edgar_id).await.unwrap(),
+        1,
+        "Alice should have 1st-degree vibe score 1 for Edgar (direct)"
+    );
+    assert_eq!(
+        get_vibe_score_one(&pool, bob_id, charlie_id).await.unwrap(),
+        1,
+        "Bob should have 1st-degree vibe score 1 for Charlie (direct)"
+    );
+    assert_eq!(
+        get_vibe_score_one(&pool, alice_id, charlie_id)
+            .await
+            .unwrap(),
+        0,
+        "Alice should have 1st-degree vibe score 0 for Charlie (no direct connection)"
+    );
+
+    // Test second-degree connections (paths of length 2)
+    assert_eq!(get_vibe_score_two(&pool, alice_id, charlie_id).await.unwrap(), 2, "Alice should have 2nd-degree vibe score 2 for Charlie (2 paths: Alice->Bob->Charlie + Alice->Edgar->Charlie)");
+    assert_eq!(
+        get_vibe_score_two(&pool, alice_id, danielle_id)
+            .await
+            .unwrap(),
+        1,
+        "Alice should have 2nd-degree vibe score 1 for Danielle (1 path: Alice->Bob->Danielle)"
+    );
+    assert_eq!(
+        get_vibe_score_two(&pool, alice_id, frank_id).await.unwrap(),
+        0,
+        "Alice should have 2nd-degree vibe score 0 for Frank (no direct paths of length 2)"
+    );
+
+    // Test third-degree connections (paths of length 3)
+    assert_eq!(get_vibe_score_three(&pool, alice_id, frank_id).await.unwrap(), 2, "Alice should have 3rd-degree vibe score 2 for Frank (2 paths: Alice->Bob->Charlie->Frank + Alice->Edgar->Charlie->Frank)");
+    assert_eq!(
+        get_vibe_score_three(&pool, alice_id, charlie_id)
+            .await
+            .unwrap(),
+        0,
+        "Alice should have 3rd-degree vibe score 0 for Charlie (no paths of length 3)"
+    );
+
+    // Test no connection (reverse direction)
+    assert_eq!(
+        get_vibe_score_one(&pool, charlie_id, alice_id)
+            .await
+            .unwrap(),
+        0,
+        "Charlie should have 1st-degree vibe score 0 for Alice (no reverse direct path)"
+    );
+    assert_eq!(
+        get_vibe_score_two(&pool, charlie_id, alice_id)
+            .await
+            .unwrap(),
+        0,
+        "Charlie should have 2nd-degree vibe score 0 for Alice (no reverse paths)"
+    );
+    assert_eq!(
+        get_vibe_score_three(&pool, charlie_id, alice_id)
+            .await
+            .unwrap(),
+        0,
+        "Charlie should have 3rd-degree vibe score 0 for Alice (no reverse paths)"
+    );
+
+    // Test connection to unconnected user
+    assert_eq!(
+        get_vibe_score_one(&pool, alice_id, david_id).await.unwrap(),
+        0,
+        "Alice should have 1st-degree vibe score 0 for David (not connected)"
+    );
+    assert_eq!(
+        get_vibe_score_two(&pool, alice_id, david_id).await.unwrap(),
+        0,
+        "Alice should have 2nd-degree vibe score 0 for David (not connected)"
+    );
+    assert_eq!(
+        get_vibe_score_three(&pool, alice_id, david_id)
+            .await
+            .unwrap(),
+        0,
+        "Alice should have 3rd-degree vibe score 0 for David (not connected)"
+    );
+
+    // Test same user
+    assert_eq!(
+        get_vibe_score_one(&pool, alice_id, alice_id).await.unwrap(),
+        0,
+        "Same user should have 1st-degree vibe score 0"
+    );
+    assert_eq!(
+        get_vibe_score_two(&pool, alice_id, alice_id).await.unwrap(),
+        0,
+        "Same user should have 2nd-degree vibe score 0"
+    );
+    assert_eq!(
+        get_vibe_score_three(&pool, alice_id, alice_id)
+            .await
+            .unwrap(),
+        0,
+        "Same user should have 3rd-degree vibe score 0"
+    );
+
+    // Clean up test data (optional - in a real test environment you might want to rollback)
+    // For now, we'll leave the test data in place since it's clearly marked as test data
+    println!("Pagerank vibe scoring test completed successfully");
 }

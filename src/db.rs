@@ -6,6 +6,7 @@
 
 use log::{debug, info, warn};
 use sqlx::{PgPool, Row};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::env;
 
 /// Establishes a connection to the PostgreSQL database using DATABASE_URL.
@@ -520,4 +521,295 @@ pub async fn save_vibe_request(
         tweet_id
     );
     Ok(())
+}
+
+/// Retrieves all good vibes relationships as an adjacency list.
+///
+/// This function queries the good_vibes table and returns a HashMap where
+/// keys are emitter user IDs and values are vectors of sensor user IDs.
+/// This represents the directed graph where an edge from A to B means
+/// A has good vibes for B.
+///
+/// # Parameters
+///
+/// - `pool`: A reference to the PostgreSQL connection pool
+///
+/// # Returns
+///
+/// - `Ok(HashMap<String, Vec<String>>)`: Adjacency list representation of the graph
+/// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the query fails
+#[allow(dead_code)]
+pub async fn get_good_vibes_graph(
+    pool: &PgPool,
+) -> Result<HashMap<String, Vec<String>>, Box<dyn std::error::Error + Send + Sync>> {
+    info!("Building good vibes graph from database");
+
+    let rows = sqlx::query(
+        r#"
+        SELECT emitter_id, sensor_id
+        FROM good_vibes
+        ORDER BY created_at
+        "#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut graph: HashMap<String, Vec<String>> = HashMap::new();
+
+    for row in rows {
+        let emitter_id: String = row.get("emitter_id");
+        let sensor_id: String = row.get("sensor_id");
+
+        graph.entry(emitter_id).or_default().push(sensor_id);
+    }
+
+    info!("Built good vibes graph with {} nodes", graph.len());
+    debug!("Graph structure: {:?}", graph.keys().collect::<Vec<_>>());
+
+    Ok(graph)
+}
+
+/// Calculates the shortest path distance (in degrees) between two users in the good vibes graph.
+///
+/// This function implements a BFS algorithm to find the minimum number of "hops"
+/// between a source user and a target user in the directed good vibes graph.
+/// A distance of 1 means direct connection, 2 means through one intermediate, etc.
+/// Returns None if no path exists between the users.
+///
+/// # Parameters
+///
+/// - `pool`: A reference to the PostgreSQL connection pool
+/// - `source_user_id`: The user ID to start the search from (emitter)
+/// - `target_user_id`: The user ID to find the path to (sensor)
+/// - `max_depth`: Maximum depth to search (to prevent infinite loops in large graphs)
+///
+/// # Returns
+///
+/// - `Ok(Some(distance))`: The shortest path distance if a path exists
+/// - `Ok(None)`: If no path exists between the users
+/// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the query fails
+///
+/// # Example
+///
+/// If Alice has good vibes for Bob, and Bob has good vibes for Charlie:
+/// - Distance from Alice to Bob: 1
+/// - Distance from Bob to Charlie: 1
+/// - Distance from Alice to Charlie: 2
+#[allow(dead_code)]
+pub async fn get_vibe_distance(
+    pool: &PgPool,
+    source_user_id: &str,
+    target_user_id: &str,
+    max_depth: usize,
+) -> Result<Option<usize>, Box<dyn std::error::Error + Send + Sync>> {
+    info!(
+        "Calculating vibe distance from {} to {} (max depth: {})",
+        source_user_id, target_user_id, max_depth
+    );
+
+    // If source and target are the same, distance is 0
+    if source_user_id == target_user_id {
+        return Ok(Some(0));
+    }
+
+    let graph = get_good_vibes_graph(pool).await?;
+
+    // BFS to find shortest path
+    let mut visited: HashSet<String> = HashSet::new();
+    let mut queue: VecDeque<(String, usize)> = VecDeque::new(); // (user_id, distance)
+
+    queue.push_back((source_user_id.to_string(), 0));
+    visited.insert(source_user_id.to_string());
+
+    while let Some((current_user, distance)) = queue.pop_front() {
+        // If we've exceeded max depth, stop searching this path
+        if distance >= max_depth {
+            continue;
+        }
+
+        // Get neighbors (users that current_user has good vibes for)
+        if let Some(neighbors) = graph.get(&current_user) {
+            for neighbor in neighbors {
+                if !visited.contains(neighbor) {
+                    // Found the target!
+                    if neighbor == target_user_id {
+                        let final_distance = distance + 1;
+                        info!(
+                            "Found path from {} to {} with distance {}",
+                            source_user_id, target_user_id, final_distance
+                        );
+                        return Ok(Some(final_distance));
+                    }
+
+                    visited.insert(neighbor.clone());
+                    queue.push_back((neighbor.clone(), distance + 1));
+                }
+            }
+        }
+    }
+
+    info!(
+        "No path found from {} to {} within max depth {}",
+        source_user_id, target_user_id, max_depth
+    );
+    Ok(None)
+}
+
+/// Calculates the first-degree vibe score (direct connections) between two users.
+///
+/// This function returns 1 if there's a direct connection from emitter to sensor,
+/// and 0 otherwise.
+///
+/// # Parameters
+///
+/// - `pool`: A reference to the PostgreSQL connection pool
+/// - `sensor_user_id`: The user ID of the person receiving good vibes (sensor)
+/// - `emitter_user_id`: The user ID of the person giving good vibes (emitter)
+///
+/// # Returns
+///
+/// - `Ok(1)`: Direct connection exists
+/// - `Ok(0)`: No direct connection
+/// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the query fails
+pub async fn get_vibe_score_one(
+    pool: &PgPool,
+    sensor_user_id: &str,
+    emitter_user_id: &str,
+) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+    info!(
+        "Calculating first-degree vibe score for sensor {} from emitter {}",
+        sensor_user_id, emitter_user_id
+    );
+
+    let has_direct = has_good_vibes_record(pool, sensor_user_id, emitter_user_id).await?;
+    let score = if has_direct { 1 } else { 0 };
+
+    info!(
+        "First-degree vibe score from {} to {}: {}",
+        emitter_user_id, sensor_user_id, score
+    );
+
+    Ok(score)
+}
+
+/// Calculates the second-degree vibe score (paths of length 2) between two users.
+///
+/// This function counts the number of paths of length exactly 2 from emitter to sensor
+/// in the good vibes graph (emitter -> X -> sensor).
+///
+/// # Parameters
+///
+/// - `pool`: A reference to the PostgreSQL connection pool
+/// - `sensor_user_id`: The user ID of the person receiving good vibes (sensor)
+/// - `emitter_user_id`: The user ID of the person giving good vibes (emitter)
+///
+/// # Returns
+///
+/// - `Ok(count)`: Number of paths of length 2
+/// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the query fails
+pub async fn get_vibe_score_two(
+    pool: &PgPool,
+    sensor_user_id: &str,
+    emitter_user_id: &str,
+) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+    info!(
+        "Calculating second-degree vibe score for sensor {} from emitter {}",
+        sensor_user_id, emitter_user_id
+    );
+
+    let path_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT COUNT(*) as path_count
+        FROM good_vibes g1
+        JOIN good_vibes g2 ON g1.sensor_id = g2.emitter_id
+        WHERE g1.emitter_id = $1 AND g2.sensor_id = $2
+        "#,
+    )
+    .bind(emitter_user_id)
+    .bind(sensor_user_id)
+    .fetch_one(pool)
+    .await?;
+
+    let score = path_count as usize;
+    info!(
+        "Found {} paths of length 2 from {} to {} - second-degree score: {}",
+        path_count, emitter_user_id, sensor_user_id, score
+    );
+
+    Ok(score)
+}
+
+/// Calculates the third-degree vibe score (paths of length 3) between two users.
+///
+/// This function counts the number of paths of length exactly 3 from emitter to sensor
+/// in the good vibes graph (emitter -> X -> Y -> sensor).
+///
+/// # Parameters
+///
+/// - `pool`: A reference to the PostgreSQL connection pool
+/// - `sensor_user_id`: The user ID of the person receiving good vibes (sensor)
+/// - `emitter_user_id`: The user ID of the person giving good vibes (emitter)
+///
+/// # Returns
+///
+/// - `Ok(count)`: Number of paths of length 3
+/// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the query fails
+pub async fn get_vibe_score_three(
+    pool: &PgPool,
+    sensor_user_id: &str,
+    emitter_user_id: &str,
+) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+    info!(
+        "Calculating third-degree vibe score for sensor {} from emitter {}",
+        sensor_user_id, emitter_user_id
+    );
+
+    let path_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT COUNT(*) as path_count
+        FROM good_vibes g1
+        JOIN good_vibes g2 ON g1.sensor_id = g2.emitter_id
+        JOIN good_vibes g3 ON g2.sensor_id = g3.emitter_id
+        WHERE g1.emitter_id = $1 AND g3.sensor_id = $2
+        "#,
+    )
+    .bind(emitter_user_id)
+    .bind(sensor_user_id)
+    .fetch_one(pool)
+    .await?;
+
+    let score = path_count as usize;
+    info!(
+        "Found {} paths of length 3 from {} to {} - third-degree score: {}",
+        path_count, emitter_user_id, sensor_user_id, score
+    );
+
+    Ok(score)
+}
+
+/// Calculates the combined vibe score between two users (deprecated - use individual degree functions).
+///
+/// This function is kept for backward compatibility but now delegates to the individual
+/// degree functions. For new code, use get_vibe_score_one, get_vibe_score_two, and get_vibe_score_three.
+///
+/// # Parameters
+///
+/// - `pool`: A reference to the PostgreSQL connection pool
+/// - `sensor_user_id`: The user ID of the person receiving good vibes (sensor)
+/// - `emitter_user_id`: The user ID of the person giving good vibes (emitter)
+/// - `max_depth`: Maximum depth to search for connections (unused)
+///
+/// # Returns
+///
+/// - `Ok(score)`: The second-degree vibe score (for backward compatibility)
+/// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the calculation fails
+#[allow(dead_code)]
+#[deprecated(note = "Use get_vibe_score_one, get_vibe_score_two, and get_vibe_score_three instead")]
+pub async fn get_vibe_score(
+    pool: &PgPool,
+    sensor_user_id: &str,
+    emitter_user_id: &str,
+    _max_depth: usize,
+) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+    get_vibe_score_two(pool, sensor_user_id, emitter_user_id).await
 }

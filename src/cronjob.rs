@@ -4,8 +4,8 @@
 //! for searching Twitter for tweets with specific hashtags and processing vibe-related queries.
 
 use crate::db::{
-    get_good_vibes_count, get_user_id_by_username, has_good_vibes_record, has_vibe_request,
-    save_vibe_request,
+    get_good_vibes_count, get_user_id_by_username, get_vibe_score_one, get_vibe_score_three,
+    get_vibe_score_two, has_vibe_request, save_vibe_request,
 };
 use crate::twitter::{reply_to_tweet, search_mentions, search_tweets_with_hashtag};
 use log::{error, info};
@@ -137,11 +137,17 @@ pub async fn start_gmgv_cronjob() -> Result<JobScheduler, Box<dyn std::error::Er
                                                 }
                                             };
 
-                                            // Check if there's a vibe record
-                                            match has_good_vibes_record(&pool, &author_user_id, &mentioned_user_id).await {
-                                                Ok(has_record) => {
-                                                    let score = if has_record { 1 } else { 0 };
-                                                    let reply_text = format!("Your vibe score for @{} is {}", mentioned_username, score);
+                                            // Calculate the three-degree vibe scores using pagerank-style algorithm
+                                            match (
+                                                get_vibe_score_one(&pool, &author_user_id, &mentioned_user_id).await,
+                                                get_vibe_score_two(&pool, &author_user_id, &mentioned_user_id).await,
+                                                get_vibe_score_three(&pool, &author_user_id, &mentioned_user_id).await,
+                                            ) {
+                                                (Ok(score_one), Ok(score_two), Ok(score_three)) => {
+                                                    let reply_text = format!(
+                                                        "Your vibes for @{} are:\n1st degree: {}\n2nd degree: {}\n3rd degree: {}",
+                                                        mentioned_username, score_one, score_two, score_three
+                                                    );
                                                     info!("Replying to vibe query tweet {} with: {}", tweet_id, reply_text);
 
                                                     match reply_to_tweet(&reply_text, &tweet_id).await {
@@ -157,14 +163,20 @@ pub async fn start_gmgv_cronjob() -> Result<JobScheduler, Box<dyn std::error::Er
                                                         }
                                                     }
                                                 }
-                                                Err(e) => {
-                                                    error!("Failed to check vibe record for @{} -> @{}: {}", author_username, mentioned_username, e);
+                                                (score_one_result, score_two_result, score_three_result) => {
+                                                    error!(
+                                                        "Failed to calculate vibe scores for @{} -> @{}: 1st={:?}, 2nd={:?}, 3rd={:?}",
+                                                        author_username, mentioned_username,
+                                                        score_one_result.as_ref().err(),
+                                                        score_two_result.as_ref().err(),
+                                                        score_three_result.as_ref().err()
+                                                    );
                                                 }
                                             }
                                         }
                                         Ok(None) => {
-                                            error!("Could not find mentioned user @{}", mentioned_username);
-                                            // Reply with score 0 since user doesn't exist
+                                            info!("Mentioned user @{} not found in database, returning vibe score 0", mentioned_username);
+                                            // Reply with score 0 since user doesn't exist in the graph
                                             let reply_text = format!("Your vibe score for @{} is 0", mentioned_username);
                                             info!("Replying to vibe query tweet {} with: {} (user not found)", tweet_id, reply_text);
 
