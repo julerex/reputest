@@ -1,22 +1,22 @@
 //! Cronjob module for scheduled tasks.
 //!
 //! This module contains functionality for running scheduled tasks, specifically
-//! for searching Twitter for tweets with specific hashtags and checking for mentions.
+//! for searching Twitter for tweets with specific hashtags and processing specific vibe queries.
 
 use crate::db::{
-    get_good_vibes_count, get_user_id_by_username, has_good_vibes_record, has_vibe_request,
+    get_user_id_by_username, has_good_vibes_record, has_vibe_request,
     save_vibe_request,
 };
 use crate::twitter::{reply_to_tweet, search_mentions, search_tweets_with_hashtag};
 use log::{error, info};
 use tokio_cron_scheduler::{Job, JobScheduler};
 
-/// Starts the cronjob scheduler for searching tweets with hashtag "gmgv" and checking mentions every 15 minutes.
+/// Starts the cronjob scheduler for searching tweets with hashtag "gmgv" and processing vibe queries every 5 minutes.
 ///
-/// This function creates a new job scheduler and adds a job that runs every 15 minutes
+/// This function creates a new job scheduler and adds a job that runs every 5 minutes
 /// to perform two tasks:
-/// 1. Search for tweets containing the hashtag "gmgv" from the past 7 days
-/// 2. Check for mentions of @reputest from the past hour and reply with good vibes count
+/// 1. Search for tweets containing the hashtag "gmgv" from the past 24 hours
+/// 2. Check for mentions of @reputest from the past 24 hours and reply to specific vibe score queries (e.g., "@reputest @username?")
 ///
 /// The job will log all found tweets and mentions to the application logs.
 ///
@@ -184,25 +184,8 @@ pub async fn start_gmgv_cronjob() -> Result<JobScheduler, Box<dyn std::error::Er
                                         }
                                     }
                                 } else {
-                                    // This is just a regular mention without a vibe query - reply with total count
-                                    match get_good_vibes_count(&pool).await {
-                                        Ok(vibes_count) => {
-                                            let reply_text = format!("Hello @{}! The current good vibes count is: {}", author_username, vibes_count);
-                                            info!("Replying to general mention tweet {} with: {}", tweet_id, reply_text);
-
-                                            match reply_to_tweet(&reply_text, &tweet_id).await {
-                                                Ok(_) => {
-                                                    info!("Successfully replied to general mention from @{}", author_username);
-                                                }
-                                                Err(e) => {
-                                                    error!("Failed to reply to general mention from @{}: {}", author_username, e);
-                                                }
-                                            }
-                                        }
-                                        Err(e) => {
-                                            error!("Failed to get good vibes count for general mention: {}", e);
-                                        }
-                                    }
+                                    // Skip general mentions without specific vibe queries
+                                    info!("Skipping general mention from @{} - no specific vibe query", author_username);
                                 }
                             }
 
@@ -217,7 +200,7 @@ pub async fn start_gmgv_cronjob() -> Result<JobScheduler, Box<dyn std::error::Er
         })?)
         .await?;
 
-    info!("Cronjob scheduler configured to search for #gmgv tweets and check mentions every 5 minutes");
+    info!("Cronjob scheduler configured to search for #gmgv tweets and process vibe queries every 5 minutes");
     Ok(sched)
 }
 
