@@ -358,3 +358,86 @@ pub async fn get_good_vibes_count(
     info!("Found {} good vibes records in database", count);
     Ok(count)
 }
+
+/// Checks if there is a good vibes record between a specific sensor and emitter.
+///
+/// This function queries the good_vibes table to see if there is a record where
+/// the sensor_id matches the provided sensor and emitter_id matches the provided emitter.
+///
+/// # Parameters
+///
+/// - `pool`: A reference to the PostgreSQL connection pool
+/// - `sensor_id`: The user ID of the person who received good vibes (sensor)
+/// - `emitter_id`: The user ID of the person who sent good vibes (emitter)
+///
+/// # Returns
+///
+/// - `Ok(true)`: If a good vibes record exists between the sensor and emitter
+/// - `Ok(false)`: If no good vibes record exists between the sensor and emitter
+/// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the query fails
+pub async fn has_good_vibes_record(
+    pool: &PgPool,
+    sensor_id: &str,
+    emitter_id: &str,
+) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+    info!(
+        "Checking for good vibes record between sensor {} and emitter {}",
+        sensor_id, emitter_id
+    );
+
+    let exists: bool = sqlx::query_scalar(
+        r#"
+        SELECT EXISTS(
+            SELECT 1 FROM good_vibes
+            WHERE sensor_id = $1 AND emitter_id = $2
+        ) as exists
+        "#,
+    )
+    .bind(sensor_id)
+    .bind(emitter_id)
+    .fetch_one(pool)
+    .await?;
+
+    info!(
+        "Good vibes record check result: {} (sensor: {}, emitter: {})",
+        exists, sensor_id, emitter_id
+    );
+    Ok(exists)
+}
+
+/// Retrieves a user ID by username from the database.
+///
+/// This function queries the users table to find the user ID for a given username.
+///
+/// # Parameters
+///
+/// - `pool`: A reference to the PostgreSQL connection pool
+/// - `username`: The Twitter username to look up
+///
+/// # Returns
+///
+/// - `Ok(Some(user_id))`: The user ID if the username exists
+/// - `Ok(None)`: If the username is not found
+/// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the query fails
+pub async fn get_user_id_by_username(
+    pool: &PgPool,
+    username: &str,
+) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
+    info!("Looking up user ID for username: {}", username);
+
+    let user_id: Option<String> = sqlx::query_scalar(
+        r#"
+        SELECT id FROM users WHERE username = $1
+        "#,
+    )
+    .bind(username)
+    .fetch_optional(pool)
+    .await?;
+
+    match &user_id {
+        Some(id) => info!("Found user ID {} for username @{}", id, username),
+        None => info!("No user found with username @{}", username),
+    }
+
+    Ok(user_id)
+}

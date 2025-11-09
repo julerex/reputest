@@ -3,7 +3,7 @@
 //! This module contains functionality for running scheduled tasks, specifically
 //! for searching Twitter for tweets with specific hashtags and checking for mentions.
 
-use crate::db::get_good_vibes_count;
+use crate::db::{get_good_vibes_count, get_user_id_by_username, has_good_vibes_record};
 use crate::twitter::{reply_to_tweet, search_mentions, search_tweets_with_hashtag};
 use log::{error, info};
 use tokio_cron_scheduler::{Job, JobScheduler};
@@ -82,46 +82,100 @@ pub async fn start_gmgv_cronjob() -> Result<JobScheduler, Box<dyn std::error::Er
                         } else {
                             info!("Found {} mentions to reply to", mentions.len());
 
-                            // Get the current good vibes count
+                            // Get the database pool for user lookups and vibe checks
                             let pool = match crate::db::get_db_pool().await {
                                 Ok(pool) => pool,
                                 Err(e) => {
                                     error!(
-                                        "Failed to get database pool for good vibes count: {}",
+                                        "Failed to get database pool for mentions processing: {}",
                                         e
                                     );
                                     return;
                                 }
                             };
 
-                            let vibes_count = match get_good_vibes_count(&pool).await {
-                                Ok(count) => count,
-                                Err(e) => {
-                                    error!("Failed to get good vibes count: {}", e);
-                                    return;
-                                }
-                            };
-
                             // Reply to each mention
-                            for (tweet_id, _tweet_text, author_username) in mentions {
-                                let reply_text = format!(
-                                    "Hello @{}! The current good vibes count is: {}",
-                                    author_username, vibes_count
-                                );
-                                info!("Replying to tweet {} with: {}", tweet_id, reply_text);
+                            for (tweet_id, _tweet_text, author_username, mentioned_user) in mentions {
+                                if let Some(mentioned_username) = mentioned_user {
+                                    // This is a vibe score query - check if the author has good vibes from the mentioned user
 
-                                match reply_to_tweet(&reply_text, &tweet_id).await {
-                                    Ok(_) => {
-                                        info!(
-                                            "Successfully replied to mention from @{}",
-                                            author_username
-                                        );
+                                    // First, get the user IDs for both the tweet author (sensor) and mentioned user (emitter)
+                                    // Look up the mentioned user's ID from database (should already exist from previous searches)
+                                    match get_user_id_by_username(&pool, &mentioned_username).await {
+                                        Ok(Some(mentioned_user_id)) => {
+                                            // Now check if there's a good vibes record between author (sensor) and mentioned user (emitter)
+                                            // We need the author's user ID too
+                                            let author_user_id = match crate::db::get_user_id_by_username(&pool, &author_username).await {
+                                                Ok(Some(user_id)) => user_id,
+                                                Ok(None) => {
+                                                    error!("Could not find user ID for author @{}", author_username);
+                                                    continue;
+                                                }
+                                                Err(e) => {
+                                                    error!("Failed to get user ID for @{}: {}", author_username, e);
+                                                    continue;
+                                                }
+                                            };
+
+                                            // Check if there's a vibe record
+                                            match has_good_vibes_record(&pool, &author_user_id, &mentioned_user_id).await {
+                                                Ok(has_record) => {
+                                                    let score = if has_record { 1 } else { 0 };
+                                                    let reply_text = format!("Your vibe score for @{} is {}", mentioned_username, score);
+                                                    info!("Replying to vibe query tweet {} with: {}", tweet_id, reply_text);
+
+                                                    match reply_to_tweet(&reply_text, &tweet_id).await {
+                                                        Ok(_) => {
+                                                            info!("Successfully replied to vibe query from @{}", author_username);
+                                                        }
+                                                        Err(e) => {
+                                                            error!("Failed to reply to vibe query from @{}: {}", author_username, e);
+                                                        }
+                                                    }
+                                                }
+                                                Err(e) => {
+                                                    error!("Failed to check vibe record for @{} -> @{}: {}", author_username, mentioned_username, e);
+                                                }
+                                            }
+                                        }
+                                        Ok(None) => {
+                                            error!("Could not find mentioned user @{}", mentioned_username);
+                                            // Reply with score 0 since user doesn't exist
+                                            let reply_text = format!("Your vibe score for @{} is 0", mentioned_username);
+                                            info!("Replying to vibe query tweet {} with: {} (user not found)", tweet_id, reply_text);
+
+                                            match reply_to_tweet(&reply_text, &tweet_id).await {
+                                                Ok(_) => {
+                                                    info!("Successfully replied to vibe query from @{} (user not found)", author_username);
+                                                }
+                                                Err(e) => {
+                                                    error!("Failed to reply to vibe query from @{}: {}", author_username, e);
+                                                }
+                                            }
+                                        }
+                                        Err(e) => {
+                                            error!("Failed to lookup mentioned user @{}: {}", mentioned_username, e);
+                                        }
                                     }
-                                    Err(e) => {
-                                        error!(
-                                            "Failed to reply to mention from @{}: {}",
-                                            author_username, e
-                                        );
+                                } else {
+                                    // This is just a regular mention without a vibe query - reply with total count
+                                    match get_good_vibes_count(&pool).await {
+                                        Ok(vibes_count) => {
+                                            let reply_text = format!("Hello @{}! The current good vibes count is: {}", author_username, vibes_count);
+                                            info!("Replying to general mention tweet {} with: {}", tweet_id, reply_text);
+
+                                            match reply_to_tweet(&reply_text, &tweet_id).await {
+                                                Ok(_) => {
+                                                    info!("Successfully replied to general mention from @{}", author_username);
+                                                }
+                                                Err(e) => {
+                                                    error!("Failed to reply to general mention from @{}: {}", author_username, e);
+                                                }
+                                            }
+                                        }
+                                        Err(e) => {
+                                            error!("Failed to get good vibes count for general mention: {}", e);
+                                        }
                                     }
                                 }
                             }

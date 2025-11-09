@@ -35,6 +35,29 @@ fn extract_first_mention(text: &str) -> Option<String> {
         .map(|s| s.to_string())
 }
 
+/// Extracts a username mentioned followed by a question mark from tweet text.
+///
+/// This function looks for patterns like "@username?" in the tweet text and returns
+/// the username (without the @ symbol or ?). If no such pattern is found,
+/// it returns None.
+///
+/// # Parameters
+///
+/// - `text`: The tweet text to search for mentions followed by ?
+///
+/// # Returns
+///
+/// - `Some(username)`: The mentioned username if found followed by ?
+/// - `None`: If no mention followed by ? is found
+fn extract_mention_with_question(text: &str) -> Option<String> {
+    // Use regex to find @mentions followed by ? (word characters after @, then ?)
+    let re = regex::Regex::new(r"@(\w+)\?").ok()?;
+    re.find(text)
+        .and_then(|mat| mat.as_str().strip_prefix('@'))
+        .and_then(|s| s.strip_suffix('?'))
+        .map(|s| s.to_string())
+}
+
 /// Looks up a user by username using the Twitter API v2.
 ///
 /// This function makes a request to the Twitter API to get user information
@@ -713,11 +736,11 @@ pub async fn search_tweets_with_hashtag(
 ///
 /// This function uses the Twitter API v2 search endpoint to find tweets that mention
 /// @reputest and were posted within the past hour. It returns a vector of tuples containing
-/// tweet ID, tweet text, and author username for each mention found.
+/// tweet ID, tweet text, author username, and optionally a mentioned user followed by "?".
 ///
 /// # Returns
 ///
-/// - `Ok(Vec<(String, String, String)>)`: Vector of (tweet_id, tweet_text, author_username) tuples
+/// - `Ok(Vec<(String, String, String, Option<String>)>)`: Vector of (tweet_id, tweet_text, author_username, mentioned_user) tuples
 /// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If authentication fails, network error, or API error
 ///
 /// # Requirements
@@ -726,7 +749,8 @@ pub async fn search_tweets_with_hashtag(
 /// - Database connection (DATABASE_URL environment variable)
 /// - Access token in the `access_tokens` table (OAuth 2.0 User Context Access Token for searching tweets)
 pub async fn search_mentions(
-) -> Result<Vec<(String, String, String)>, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<Vec<(String, String, String, Option<String>)>, Box<dyn std::error::Error + Send + Sync>>
+{
     info!("Starting search for @reputest mentions in the past hour");
 
     // Get database pool and load Twitter API credentials from database
@@ -817,17 +841,22 @@ pub async fn search_mentions(
                             .map(|s| s.as_str())
                             .unwrap_or("unknown");
 
+                        // Check if the tweet mentions another user followed by ?
+                        let mentioned_user = extract_mention_with_question(text);
+
                         info!(
-                            "Mention {} (ID: {}): {} by @{}",
+                            "Mention {} (ID: {}): {} by @{} (querying: {})",
                             i + 1,
                             id,
                             text,
-                            author_username
+                            author_username,
+                            mentioned_user.as_deref().unwrap_or("none")
                         );
                         mentions.push((
                             id.to_string(),
                             text.to_string(),
                             author_username.to_string(),
+                            mentioned_user,
                         ));
                     }
                 }
