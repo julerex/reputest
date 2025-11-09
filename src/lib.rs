@@ -43,3 +43,6 @@ pub use handlers::{
 };
 pub use oauth::build_oauth2_user_context_header;
 pub use twitter::{post_tweet, search_tweets_with_hashtag};
+
+#[cfg(test)]
+mod tests;

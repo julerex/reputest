@@ -30,3 +30,7 @@ CREATE TABLE good_vibes (
     sensor_id TEXT NOT NULL REFERENCES users(id),
     created_at TIMESTAMP WITH TIME ZONE NOT NULL
 );
+
+CREATE TABLE vibe_requests (
+    tweet_id TEXT PRIMARY KEY
+);

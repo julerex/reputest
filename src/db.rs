@@ -441,3 +441,77 @@ pub async fn get_user_id_by_username(
 
     Ok(user_id)
 }
+
+/// Checks if a tweet ID exists in the vibe_requests table.
+///
+/// This function queries the vibe_requests table to see if the given tweet_id
+/// has already been processed for a vibe score query.
+///
+/// # Parameters
+///
+/// - `pool`: A reference to the PostgreSQL connection pool
+/// - `tweet_id`: The tweet ID to check
+///
+/// # Returns
+///
+/// - `Ok(true)`: If the tweet ID exists in the vibe_requests table
+/// - `Ok(false)`: If the tweet ID does not exist in the vibe_requests table
+/// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the query fails
+pub async fn has_vibe_request(
+    pool: &PgPool,
+    tweet_id: &str,
+) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+    info!("Checking if tweet {} has been processed for vibe request", tweet_id);
+
+    let exists: bool = sqlx::query_scalar(
+        r#"
+        SELECT EXISTS(
+            SELECT 1 FROM vibe_requests
+            WHERE tweet_id = $1
+        ) as exists
+        "#,
+    )
+    .bind(tweet_id)
+    .fetch_one(pool)
+    .await?;
+
+    info!(
+        "Vibe request check result: {} (tweet: {})",
+        exists, tweet_id
+    );
+    Ok(exists)
+}
+
+/// Stores a vibe request in the database.
+///
+/// This function inserts a tweet ID into the vibe_requests table to mark
+/// that a vibe score query has been processed for this tweet.
+///
+/// # Parameters
+///
+/// - `pool`: A reference to the PostgreSQL connection pool
+/// - `tweet_id`: The tweet ID to store
+///
+/// # Returns
+///
+/// - `Ok(())`: If the vibe request was successfully stored
+/// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the insert fails
+pub async fn save_vibe_request(
+    pool: &PgPool,
+    tweet_id: &str,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    info!("Storing vibe request for tweet {} in database", tweet_id);
+
+    sqlx::query(
+        r#"
+        INSERT INTO vibe_requests (tweet_id)
+        VALUES ($1)
+        "#,
+    )
+    .bind(tweet_id)
+    .execute(pool)
+    .await?;
+
+    info!("Successfully stored vibe request for tweet {} in database", tweet_id);
+    Ok(())
+}

@@ -37,25 +37,53 @@ fn extract_first_mention(text: &str) -> Option<String> {
 
 /// Extracts a username mentioned followed by a question mark from tweet text.
 ///
-/// This function looks for patterns like "@username?" in the tweet text and returns
+/// This function looks for patterns like "@username?", "@username ?", "username?", or "username ?" in the tweet text and returns
 /// the username (without the @ symbol or ?). If no such pattern is found,
 /// it returns None.
 ///
 /// # Parameters
 ///
-/// - `text`: The tweet text to search for mentions followed by ?
+/// - `text`: The tweet text to search for usernames followed by ?
 ///
 /// # Returns
 ///
-/// - `Some(username)`: The mentioned username if found followed by ?
-/// - `None`: If no mention followed by ? is found
-fn extract_mention_with_question(text: &str) -> Option<String> {
-    // Use regex to find @mentions followed by ? (word characters after @, then ?)
-    let re = regex::Regex::new(r"@(\w+)\?").ok()?;
-    re.find(text)
-        .and_then(|mat| mat.as_str().strip_prefix('@'))
-        .and_then(|s| s.strip_suffix('?'))
-        .map(|s| s.to_string())
+/// - `Some(username)`: The username if found followed by ?
+/// - `None`: If no username followed by ? is found
+pub fn extract_mention_with_question(text: &str) -> Option<String> {
+    // First try to match @username? or @username ? patterns (with @ symbol)
+    let re_with_at = regex::Regex::new(r"@(\w+)\s*\?").ok()?;
+    if let Some(mat) = re_with_at.find(text) {
+        return mat.as_str()
+            .strip_prefix('@')
+            .and_then(|s| s.strip_suffix('?'))
+            .map(|s| s.trim().to_string());
+    }
+
+    // If no @ pattern found, try to match username? or username ? patterns (without @ symbol)
+    // But exclude common words and the bot's username to avoid false positives
+    let re_without_at = regex::Regex::new(r"([a-zA-Z0-9_]{1,15})\s*\?").ok()?;
+    // Find all matches and take the last valid one (to prefer later usernames over excluded words like "reputest")
+    let mut valid_username = None;
+    for mat in re_without_at.find_iter(text) {
+        let match_end = mat.end();
+
+        // Check that the ? is not followed by a word character (to avoid matching "what?" in "what?ever")
+        if match_end < text.len() && text.chars().nth(match_end).unwrap().is_alphanumeric() {
+            continue;
+        }
+
+        let username = mat.as_str()
+            .strip_suffix('?')
+            .map(|s| s.trim().to_string())?;
+
+        // Exclude common words that might be followed by ? to avoid false positives
+        let excluded_words = ["what", "when", "where", "how", "why", "who", "which", "the", "a", "an", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "do", "does", "did", "will", "would", "could", "should", "can", "may", "might", "must", "shall", "reputest"];
+        if !excluded_words.contains(&username.to_lowercase().as_str()) {
+            valid_username = Some(username);
+        }
+    }
+
+    valid_username
 }
 
 /// Looks up a user by username using the Twitter API v2.
@@ -426,10 +454,10 @@ pub async fn reply_to_tweet(
     make_authenticated_request(&mut config, &pool, request_builder, "reply_to_tweet").await
 }
 
-/// Searches for tweets with a specific hashtag in the past 7 days and saves good vibes data.
+/// Searches for tweets with a specific hashtag in the past 24 hours and saves good vibes data.
 ///
 /// This function uses the Twitter API v2 search endpoint to find tweets containing
-/// the specified hashtag that were posted within the past 7 days. It extracts vibe
+/// the specified hashtag that were posted within the past 24 hours. It extracts vibe
 /// emitter (poster) and vibe receiver (mentioned user) information and saves it
 /// to the database. It uses OAuth 2.0 User Context Access Token authentication for v2 endpoints.
 ///
@@ -495,16 +523,16 @@ pub async fn search_tweets_with_hashtag(
     debug!("Twitter config loaded successfully for search");
     let client = Client::new();
 
-    // Calculate the timestamp for 7 days ago
-    let seven_days_ago = SystemTime::now()
+    // Calculate the timestamp for 24 hours ago
+    let twenty_four_hours_ago = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs()
-        - 604800; // 604800 seconds = 7 days
+        - 86400; // 86400 seconds = 24 hours
 
     // Build the search query with hashtag and time filter
     let query = format!("#{}", hashtag);
-    let start_time = chrono::DateTime::from_timestamp(seven_days_ago as i64, 0)
+    let start_time = chrono::DateTime::from_timestamp(twenty_four_hours_ago as i64, 0)
         .unwrap()
         .format("%Y-%m-%dT%H:%M:%S.000Z");
     let url = format!(
@@ -515,7 +543,7 @@ pub async fn search_tweets_with_hashtag(
 
     info!("Search URL: {}", url);
     debug!("Search query: {}", query);
-    debug!("Start time: {}", start_time);
+    debug!("Start time (24 hours ago): {}", start_time);
 
     // Build the Authorization header with OAuth 2.0 User Context Access Token
     info!("Building OAuth 2.0 User Context authorization header for search");
@@ -605,12 +633,12 @@ pub async fn search_tweets_with_hashtag(
         if let Some(tweets) = data.as_array() {
             if tweets.is_empty() {
                 info!(
-                    "No tweets found with hashtag #{} in the past 7 days",
+                    "No tweets found with hashtag #{} in the past 24 hours",
                     hashtag
                 );
             } else {
                 info!(
-                    "Found {} tweets with hashtag #{} in the past 7 days:",
+                    "Found {} tweets with hashtag #{} in the past 24 hours:",
                     tweets.len(),
                     hashtag
                 );
@@ -724,7 +752,7 @@ pub async fn search_tweets_with_hashtag(
         }
     } else {
         info!(
-            "No tweets found with hashtag #{} in the past 7 days",
+            "No tweets found with hashtag #{} in the past 24 hours",
             hashtag
         );
     }
@@ -732,10 +760,10 @@ pub async fn search_tweets_with_hashtag(
     Ok(())
 }
 
-/// Searches for mentions of the reputest user in the past hour and returns tweet information.
+/// Searches for mentions of the reputest user in the past 24 hours and returns tweet information.
 ///
 /// This function uses the Twitter API v2 search endpoint to find tweets that mention
-/// @reputest and were posted within the past hour. It returns a vector of tuples containing
+/// @reputest and were posted within the past 24 hours. It returns a vector of tuples containing
 /// tweet ID, tweet text, author username, and optionally a mentioned user followed by "?".
 ///
 /// # Returns
@@ -761,16 +789,16 @@ pub async fn search_mentions(
 
     let client = Client::new();
 
-    // Calculate the timestamp for 1 hour ago
-    let one_hour_ago = SystemTime::now()
+    // Calculate the timestamp for 24 hours ago
+    let twenty_four_hours_ago = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs()
-        - 3600; // 3600 seconds = 1 hour
+        - 86400; // 86400 seconds = 24 hours
 
     // Build the search query for mentions of @reputest
     let query = "@reputest";
-    let start_time = chrono::DateTime::from_timestamp(one_hour_ago as i64, 0)
+    let start_time = chrono::DateTime::from_timestamp(twenty_four_hours_ago as i64, 0)
         .unwrap()
         .format("%Y-%m-%dT%H:%M:%S.000Z");
     let url = format!(
@@ -781,7 +809,7 @@ pub async fn search_mentions(
 
     info!("Mentions search URL: {}", url);
     debug!("Search query: {}", query);
-    debug!("Start time: {}", start_time);
+    debug!("Start time (24 hours ago): {}", start_time);
 
     // Build the Authorization header with OAuth 2.0 User Context Access Token
     info!("Building OAuth 2.0 User Context authorization header for mentions search");
@@ -824,10 +852,10 @@ pub async fn search_mentions(
     if let Some(data) = json_response.get("data") {
         if let Some(tweets) = data.as_array() {
             if tweets.is_empty() {
-                info!("No mentions of @reputest found in the past hour");
+                info!("No mentions of @reputest found in the past 24 hours");
             } else {
                 info!(
-                    "Found {} mentions of @reputest in the past hour:",
+                    "Found {} mentions of @reputest in the past 24 hours:",
                     tweets.len()
                 );
                 for (i, tweet) in tweets.iter().enumerate() {
@@ -862,10 +890,10 @@ pub async fn search_mentions(
                 }
             }
         } else {
-            info!("No mentions of @reputest found in the past hour");
+            info!("No mentions of @reputest found in the past 24 hours");
         }
     } else {
-        info!("No mentions of @reputest found in the past hour");
+        info!("No mentions of @reputest found in the past 24 hours");
     }
 
     Ok(mentions)

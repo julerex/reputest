@@ -3,14 +3,14 @@
 //! This module contains functionality for running scheduled tasks, specifically
 //! for searching Twitter for tweets with specific hashtags and checking for mentions.
 
-use crate::db::{get_good_vibes_count, get_user_id_by_username, has_good_vibes_record};
+use crate::db::{get_good_vibes_count, get_user_id_by_username, has_good_vibes_record, has_vibe_request, save_vibe_request};
 use crate::twitter::{reply_to_tweet, search_mentions, search_tweets_with_hashtag};
 use log::{error, info};
 use tokio_cron_scheduler::{Job, JobScheduler};
 
-/// Starts the cronjob scheduler for searching tweets with hashtag "gmgv" and checking mentions every hour.
+/// Starts the cronjob scheduler for searching tweets with hashtag "gmgv" and checking mentions every 15 minutes.
 ///
-/// This function creates a new job scheduler and adds a job that runs every hour
+/// This function creates a new job scheduler and adds a job that runs every 15 minutes
 /// to perform two tasks:
 /// 1. Search for tweets containing the hashtag "gmgv" from the past 7 days
 /// 2. Check for mentions of @reputest from the past hour and reply with good vibes count
@@ -24,10 +24,10 @@ use tokio_cron_scheduler::{Job, JobScheduler};
 ///
 /// # Job Schedule
 ///
-/// The job runs every hour using the cron expression "0 0 * * * * *"
+/// The job runs every 5 minutes using the cron expression "0 0/5 * * * * *"
 /// which means:
 /// - 0 seconds
-/// - 0 minutes
+/// - Every 5 minutes (0/5)
 /// - Every hour
 /// - Every day
 /// - Every month
@@ -58,9 +58,9 @@ pub async fn start_gmgv_cronjob() -> Result<JobScheduler, Box<dyn std::error::Er
 {
     let sched = JobScheduler::new().await?;
 
-    // Create a job that runs every hour
+    // Create a job that runs every 5 minutes
     sched
-        .add(Job::new_async("0 0 * * * * *", |_uuid, _l| {
+        .add(Job::new_async("0 0/5 * * * * *", |_uuid, _l| {
             Box::pin(async {
                 // Task 1: Search for #gmgv tweets
                 info!("Starting scheduled search for #gmgv tweets");
@@ -99,6 +99,21 @@ pub async fn start_gmgv_cronjob() -> Result<JobScheduler, Box<dyn std::error::Er
                                 if let Some(mentioned_username) = mentioned_user {
                                     // This is a vibe score query - check if the author has good vibes from the mentioned user
 
+                                    // First, check if this tweet has already been processed
+                                    match has_vibe_request(&pool, &tweet_id).await {
+                                        Ok(true) => {
+                                            info!("Skipping vibe query tweet {} - already processed", tweet_id);
+                                            continue;
+                                        }
+                                        Ok(false) => {
+                                            // Tweet not processed yet, proceed with normal logic
+                                        }
+                                        Err(e) => {
+                                            error!("Failed to check if tweet {} has been processed: {}", tweet_id, e);
+                                            continue;
+                                        }
+                                    }
+
                                     // First, get the user IDs for both the tweet author (sensor) and mentioned user (emitter)
                                     // Look up the mentioned user's ID from database (should already exist from previous searches)
                                     match get_user_id_by_username(&pool, &mentioned_username).await {
@@ -127,6 +142,10 @@ pub async fn start_gmgv_cronjob() -> Result<JobScheduler, Box<dyn std::error::Er
                                                     match reply_to_tweet(&reply_text, &tweet_id).await {
                                                         Ok(_) => {
                                                             info!("Successfully replied to vibe query from @{}", author_username);
+                                                            // Mark this tweet as processed
+                                                            if let Err(e) = save_vibe_request(&pool, &tweet_id).await {
+                                                                error!("Failed to save vibe request for tweet {}: {}", tweet_id, e);
+                                                            }
                                                         }
                                                         Err(e) => {
                                                             error!("Failed to reply to vibe query from @{}: {}", author_username, e);
@@ -147,6 +166,10 @@ pub async fn start_gmgv_cronjob() -> Result<JobScheduler, Box<dyn std::error::Er
                                             match reply_to_tweet(&reply_text, &tweet_id).await {
                                                 Ok(_) => {
                                                     info!("Successfully replied to vibe query from @{} (user not found)", author_username);
+                                                    // Mark this tweet as processed
+                                                    if let Err(e) = save_vibe_request(&pool, &tweet_id).await {
+                                                        error!("Failed to save vibe request for tweet {}: {}", tweet_id, e);
+                                                    }
                                                 }
                                                 Err(e) => {
                                                     error!("Failed to reply to vibe query from @{}: {}", author_username, e);
@@ -191,7 +214,7 @@ pub async fn start_gmgv_cronjob() -> Result<JobScheduler, Box<dyn std::error::Er
         })?)
         .await?;
 
-    info!("Cronjob scheduler configured to search for #gmgv tweets and check mentions every hour");
+    info!("Cronjob scheduler configured to search for #gmgv tweets and check mentions every 5 minutes");
     Ok(sched)
 }
 

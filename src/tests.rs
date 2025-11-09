@@ -25,6 +25,7 @@ use crate::{
     handlers::{
         handle_health, handle_reputest_get, handle_reputest_post, handle_root, handle_tweet,
     },
+    twitter::extract_mention_with_question,
 };
 use axum::{
     body::Body,
@@ -250,4 +251,70 @@ fn test_get_server_port() {
 
     // Clean up
     std::env::remove_var("PORT");
+}
+
+/// Unit test for the extract_mention_with_question function.
+///
+/// This test verifies that the function correctly extracts usernames from
+/// mention patterns with question marks, including cases with and without @ symbols.
+#[test]
+fn test_extract_mention_with_question() {
+    // Test cases with @ symbol
+    // Test case with space before question mark (like "@reputest @callanable ?")
+    assert_eq!(
+        extract_mention_with_question("@reputest @callanable ?"),
+        Some("callanable".to_string())
+    );
+
+    // Test case without space before question mark
+    assert_eq!(
+        extract_mention_with_question("@reputest @user?"),
+        Some("user".to_string())
+    );
+
+    // Test case with multiple spaces
+    assert_eq!(
+        extract_mention_with_question("@reputest @testuser   ?"),
+        Some("testuser".to_string())
+    );
+
+    // Test cases without @ symbol
+    // Test case with space before question mark (like "@reputest callanable ?")
+    assert_eq!(
+        extract_mention_with_question("@reputest callanable ?"),
+        Some("callanable".to_string())
+    );
+
+    // Test case without space before question mark
+    assert_eq!(
+        extract_mention_with_question("@reputest user?"),
+        Some("user".to_string())
+    );
+
+    // Test case with multiple spaces
+    assert_eq!(
+        extract_mention_with_question("@reputest testuser   ?"),
+        Some("testuser".to_string())
+    );
+
+    // Test case with the bot mention followed by question mark (should extract the bot username)
+    assert_eq!(
+        extract_mention_with_question("@reputest ?"),
+        Some("reputest".to_string())
+    );
+
+    // Test cases that should return None
+    // Test case with no question mark pattern
+    assert_eq!(extract_mention_with_question("@reputest hello"), None);
+
+    // Test case with a word followed by ? (should match if it's not excluded)
+    assert_eq!(extract_mention_with_question("@reputest hello ?"), Some("hello".to_string()));
+
+    // Test case with only the bot mention
+    assert_eq!(extract_mention_with_question("@reputest"), None);
+
+    // Test cases with excluded words
+    assert_eq!(extract_mention_with_question("@reputest what?"), None);
+    assert_eq!(extract_mention_with_question("@reputest why?"), None);
+    assert_eq!(extract_mention_with_question("@reputest reputest?"), None);
 }
