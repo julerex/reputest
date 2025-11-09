@@ -1,10 +1,10 @@
 //! Cronjob module for scheduled tasks.
 //!
 //! This module contains functionality for running scheduled tasks, specifically
-//! for searching Twitter for tweets with specific hashtags and processing specific vibe queries.
+//! for searching Twitter for tweets with specific hashtags and processing vibe-related queries.
 
 use crate::db::{
-    get_user_id_by_username, has_good_vibes_record, has_vibe_request,
+    get_good_vibes_count, get_user_id_by_username, has_good_vibes_record, has_vibe_request,
     save_vibe_request,
 };
 use crate::twitter::{reply_to_tweet, search_mentions, search_tweets_with_hashtag};
@@ -16,7 +16,9 @@ use tokio_cron_scheduler::{Job, JobScheduler};
 /// This function creates a new job scheduler and adds a job that runs every 5 minutes
 /// to perform two tasks:
 /// 1. Search for tweets containing the hashtag "gmgv" from the past 24 hours
-/// 2. Check for mentions of @reputest from the past 24 hours and reply to specific vibe score queries (e.g., "@reputest @username?")
+/// 2. Check for mentions of @reputest from the past 24 hours and reply to:
+///    - Specific vibe score queries (e.g., "@reputest @username?")
+///    - General requests for the total vibes count (messages containing "vibecount")
 ///
 /// The job will log all found tweets and mentions to the application logs.
 ///
@@ -98,7 +100,7 @@ pub async fn start_gmgv_cronjob() -> Result<JobScheduler, Box<dyn std::error::Er
                             };
 
                             // Reply to each mention
-                            for (tweet_id, _tweet_text, author_username, mentioned_user) in mentions {
+                            for (tweet_id, tweet_text, author_username, mentioned_user) in mentions {
                                 if let Some(mentioned_username) = mentioned_user {
                                     // This is a vibe score query - check if the author has good vibes from the mentioned user
 
@@ -184,8 +186,31 @@ pub async fn start_gmgv_cronjob() -> Result<JobScheduler, Box<dyn std::error::Er
                                         }
                                     }
                                 } else {
-                                    // Skip general mentions without specific vibe queries
-                                    info!("Skipping general mention from @{} - no specific vibe query", author_username);
+                                    // Check if the mention contains "vibecount" (case insensitive)
+                                    if tweet_text.to_lowercase().contains("vibecount") {
+                                        // Reply with total vibes count
+                                        match get_good_vibes_count(&pool).await {
+                                            Ok(vibes_count) => {
+                                                let reply_text = format!("Hello @{}! The current good vibes count is: {}", author_username, vibes_count);
+                                                info!("Replying to vibecount request tweet {} with: {}", tweet_id, reply_text);
+
+                                                match reply_to_tweet(&reply_text, &tweet_id).await {
+                                                    Ok(_) => {
+                                                        info!("Successfully replied to vibecount request from @{}", author_username);
+                                                    }
+                                                    Err(e) => {
+                                                        error!("Failed to reply to vibecount request from @{}: {}", author_username, e);
+                                                    }
+                                                }
+                                            }
+                                            Err(e) => {
+                                                error!("Failed to get good vibes count for vibecount request: {}", e);
+                                            }
+                                        }
+                                    } else {
+                                        // Skip general mentions without "vibecount" or specific vibe queries
+                                        info!("Skipping general mention from @{} - no vibecount request or specific vibe query", author_username);
+                                    }
                                 }
                             }
 
