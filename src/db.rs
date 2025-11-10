@@ -443,6 +443,50 @@ pub async fn get_user_id_by_username(
     Ok(user_id)
 }
 
+/// Retrieves complete user information by username from the database.
+///
+/// This function queries the users table to get all stored information
+/// for a user by their username.
+///
+/// # Parameters
+///
+/// - `pool`: A reference to the PostgreSQL connection pool
+/// - `username`: The Twitter username to look up
+///
+/// # Returns
+///
+/// - `Ok(Some((user_id, name, created_at)))`: Complete user information if found
+/// - `Ok(None)`: If the username is not found in the database
+/// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the query fails
+pub async fn get_user_info_by_username(
+    pool: &PgPool,
+    username: &str,
+) -> Result<
+    Option<(String, String, chrono::DateTime<chrono::Utc>)>,
+    Box<dyn std::error::Error + Send + Sync>,
+> {
+    info!("Looking up complete user info for username: {}", username);
+
+    let result: Option<(String, String, chrono::DateTime<chrono::Utc>)> = sqlx::query_as(
+        r#"
+        SELECT id, name, created_at FROM users WHERE username = $1
+        "#,
+    )
+    .bind(username)
+    .fetch_optional(pool)
+    .await?;
+
+    match &result {
+        Some((id, name, created_at)) => info!(
+            "Found user info for @{}: {} (ID: {}) created at {}",
+            username, name, id, created_at
+        ),
+        None => info!("No user info found for username @{}", username),
+    }
+
+    Ok(result)
+}
+
 /// Checks if a tweet ID exists in the vibe_requests table.
 ///
 /// This function queries the vibe_requests table to see if the given tweet_id
@@ -481,6 +525,49 @@ pub async fn has_vibe_request(
 
     info!(
         "Vibe request check result: {} (tweet: {})",
+        exists, tweet_id
+    );
+    Ok(exists)
+}
+
+/// Checks if a tweet ID exists in the good_vibes table.
+///
+/// This function queries the good_vibes table to see if the given tweet_id
+/// has already been processed for good vibes data.
+///
+/// # Parameters
+///
+/// - `pool`: A reference to the PostgreSQL connection pool
+/// - `tweet_id`: The tweet ID to check
+///
+/// # Returns
+///
+/// - `Ok(true)`: If the tweet ID exists in the good_vibes table
+/// - `Ok(false)`: If the tweet ID does not exist in the good_vibes table
+/// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the query fails
+pub async fn has_good_vibes_tweet(
+    pool: &PgPool,
+    tweet_id: &str,
+) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+    info!(
+        "Checking if tweet {} has already been processed for good vibes",
+        tweet_id
+    );
+
+    let exists: bool = sqlx::query_scalar(
+        r#"
+        SELECT EXISTS(
+            SELECT 1 FROM good_vibes
+            WHERE tweet_id = $1
+        ) as exists
+        "#,
+    )
+    .bind(tweet_id)
+    .fetch_one(pool)
+    .await?;
+
+    info!(
+        "Good vibes tweet check result: {} (tweet: {})",
         exists, tweet_id
     );
     Ok(exists)

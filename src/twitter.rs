@@ -687,53 +687,103 @@ pub async fn search_tweets_with_hashtag(
                                     );
                                     info!("  Vibe emitter: {}", vibe_emitter_username);
 
-                                    // Look up the emitter user by username
-                                    match lookup_user_by_username(
-                                        &mut config,
+                                    // First check if the emitter user exists in the database
+                                    let user_info = match crate::db::get_user_info_by_username(
                                         &pool,
                                         vibe_emitter_username,
                                     )
                                     .await
                                     {
-                                        Ok(Some((
-                                            emitter_user_id,
-                                            emitter_name,
-                                            emitter_created_at,
-                                        ))) => {
-                                            // Save emitter user data
-                                            if let Err(e) = crate::db::save_user(
-                                                &pool,
-                                                &emitter_user_id,
-                                                vibe_emitter_username,
-                                                &emitter_name,
-                                                emitter_created_at,
-                                            )
-                                            .await
-                                            {
-                                                error!("Failed to save emitter user data: {}", e);
-                                            }
-
-                                            // Save good vibes data
-                                            if let Err(e) = crate::db::save_good_vibes(
-                                                &pool,
-                                                id.as_str().unwrap(), // tweet_id
-                                                &emitter_user_id, // emitter_id (person who sent good vibes)
-                                                poster_id, // sensor_id (person who received good vibes)
-                                                created_at, // created_at from tweet
-                                            )
-                                            .await
-                                            {
-                                                error!("Failed to save good vibes data: {}", e);
-                                            }
+                                        Ok(Some((user_id, name, created_at))) => {
+                                            // User found in database, use cached info
+                                            info!(
+                                                "Using cached user info for @{} from database",
+                                                vibe_emitter_username
+                                            );
+                                            Some((user_id, name, created_at))
                                         }
                                         Ok(None) => {
-                                            warn!("Emitter user {} not found, skipping good vibes save", vibe_emitter_username);
+                                            // User not in database, look up via Twitter API
+                                            info!("User @{} not found in database, looking up via Twitter API", vibe_emitter_username);
+                                            match lookup_user_by_username(
+                                                &mut config,
+                                                &pool,
+                                                vibe_emitter_username,
+                                            )
+                                            .await
+                                            {
+                                                Ok(Some((user_id, name, created_at))) => {
+                                                    // Save the user data for future use
+                                                    if let Err(e) = crate::db::save_user(
+                                                        &pool,
+                                                        &user_id,
+                                                        vibe_emitter_username,
+                                                        &name,
+                                                        created_at,
+                                                    )
+                                                    .await
+                                                    {
+                                                        error!(
+                                                            "Failed to save emitter user data: {}",
+                                                            e
+                                                        );
+                                                    }
+                                                    Some((user_id, name, created_at))
+                                                }
+                                                Ok(None) => {
+                                                    warn!(
+                                                        "Emitter user {} not found via Twitter API",
+                                                        vibe_emitter_username
+                                                    );
+                                                    None
+                                                }
+                                                Err(e) => {
+                                                    error!(
+                                                        "Failed to lookup emitter user {} via Twitter API: {}",
+                                                        vibe_emitter_username, e
+                                                    );
+                                                    None
+                                                }
+                                            }
                                         }
                                         Err(e) => {
                                             error!(
-                                                "Failed to lookup emitter user {}: {}",
+                                                "Failed to check database for user @{}: {}",
                                                 vibe_emitter_username, e
                                             );
+                                            None
+                                        }
+                                    };
+
+                                    // If we have user info (either from cache or API), save the good vibes data
+                                    if let Some((emitter_user_id, _, _)) = user_info {
+                                        // First check if this tweet has already been processed
+                                        match crate::db::has_good_vibes_tweet(
+                                            &pool,
+                                            id.as_str().unwrap(),
+                                        )
+                                        .await
+                                        {
+                                            Ok(true) => {
+                                                info!("Skipping tweet {} - already processed for good vibes", id.as_str().unwrap());
+                                            }
+                                            Ok(false) => {
+                                                // Tweet not processed yet, save the good vibes data
+                                                if let Err(e) = crate::db::save_good_vibes(
+                                                    &pool,
+                                                    id.as_str().unwrap(), // tweet_id
+                                                    &emitter_user_id, // emitter_id (person who sent good vibes)
+                                                    poster_id, // sensor_id (person who received good vibes)
+                                                    created_at, // created_at from tweet
+                                                )
+                                                .await
+                                                {
+                                                    error!("Failed to save good vibes data: {}", e);
+                                                }
+                                            }
+                                            Err(e) => {
+                                                error!("Failed to check if tweet {} has been processed: {}", id.as_str().unwrap(), e);
+                                            }
                                         }
                                     }
                                 }
