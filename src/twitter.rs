@@ -35,61 +35,46 @@ fn extract_first_mention(text: &str) -> Option<String> {
         .map(|s| s.to_string())
 }
 
-/// Extracts a username mentioned followed by a question mark from tweet text.
+/// Extracts a username from a tweet that specifically queries the bot in the format "@reputest username ?" or "@reputest @username ?".
 ///
-/// This function looks for patterns like "@username?", "@username ?", "username?", or "username ?" in the tweet text and returns
-/// the username (without the @ symbol or ?). If no such pattern is found,
-/// it returns None.
+/// This function only matches the exact patterns where a tweet starts with "@reputest"
+/// followed by a username (with or without @) and ends with a question mark.
+/// This is much more restrictive than the previous implementation to avoid false positives.
+/// Common words and the bot's username are excluded to prevent false matches.
 ///
 /// # Parameters
 ///
-/// - `text`: The tweet text to search for usernames followed by ?
+/// - `text`: The tweet text to analyze
 ///
 /// # Returns
 ///
-/// - `Some(username)`: The username if found followed by ?
-/// - `None`: If no username followed by ? is found
+/// - `Some(username)`: The username if found in the specific query format
+/// - `None`: If the tweet doesn't match the required format
 pub fn extract_mention_with_question(text: &str) -> Option<String> {
-    // First try to match @username? or @username ? patterns (with @ symbol)
-    let re_with_at = regex::Regex::new(r"@(\w+)\s*\?").ok()?;
-    if let Some(mat) = re_with_at.find(text) {
-        return mat
-            .as_str()
-            .strip_prefix('@')
-            .and_then(|s| s.strip_suffix('?'))
-            .map(|s| s.trim().to_string());
-    }
+    // Use regex to match only the specific patterns: "@reputest username ?" or "@reputest @username ?"
+    // The pattern ensures the tweet starts with "@reputest" followed by whitespace, then username, optional whitespace, then "?"
+    let re = regex::Regex::new(r"^@reputest\s+(@?[a-zA-Z0-9_]{1,15})\s*\?$").ok()?;
 
-    // If no @ pattern found, try to match username? or username ? patterns (without @ symbol)
-    // But exclude common words and the bot's username to avoid false positives
-    let re_without_at = regex::Regex::new(r"([a-zA-Z0-9_]{1,15})\s*\?").ok()?;
-    // Find all matches and take the last valid one (to prefer later usernames over excluded words like "reputest")
-    let mut valid_username = None;
-    for mat in re_without_at.find_iter(text) {
-        let match_end = mat.end();
+    if let Some(captures) = re.captures(text) {
+        if let Some(username_match) = captures.get(1) {
+            let username = username_match.as_str();
+            // Remove @ prefix if present
+            let clean_username = username.strip_prefix('@').unwrap_or(username);
 
-        // Check that the ? is not followed by a word character (to avoid matching "what?" in "what?ever")
-        if match_end < text.len() && text.chars().nth(match_end).unwrap().is_alphanumeric() {
-            continue;
-        }
-
-        let username = mat
-            .as_str()
-            .strip_suffix('?')
-            .map(|s| s.trim().to_string())?;
-
-        // Exclude common words that might be followed by ? to avoid false positives
-        let excluded_words = [
-            "what", "when", "where", "how", "why", "who", "which", "the", "a", "an", "is", "are",
-            "was", "were", "be", "been", "being", "have", "has", "had", "do", "does", "did",
-            "will", "would", "could", "should", "can", "may", "might", "must", "shall", "reputest",
-        ];
-        if !excluded_words.contains(&username.to_lowercase().as_str()) {
-            valid_username = Some(username);
+            // Exclude common words that might be followed by ? to avoid false positives
+            let excluded_words = [
+                "what", "when", "where", "how", "why", "who", "which", "the", "a", "an", "is",
+                "are", "was", "were", "be", "been", "being", "have", "has", "had", "do", "does",
+                "did", "will", "would", "could", "should", "can", "may", "might", "must", "shall",
+                "reputest",
+            ];
+            if !excluded_words.contains(&clean_username.to_lowercase().as_str()) {
+                return Some(clean_username.to_string());
+            }
         }
     }
 
-    valid_username
+    None
 }
 
 /// Looks up a user by username using the Twitter API v2.
@@ -460,12 +445,280 @@ pub async fn reply_to_tweet(
     make_authenticated_request(&mut config, &pool, request_builder, "reply_to_tweet").await
 }
 
+/// Processes a single page of tweet search results and saves good vibes data.
+///
+/// This helper function processes the JSON response from the Twitter API search endpoint,
+/// extracts user and tweet information, and saves good vibes data for tweets containing
+/// user mentions. It handles pagination by returning the next_token if available.
+///
+/// # Parameters
+///
+/// - `json_response`: The JSON response from the Twitter API
+/// - `pool`: A reference to the PostgreSQL connection pool
+/// - `config`: Mutable reference to TwitterConfig (may be updated with new token)
+///
+/// # Returns
+///
+/// - `Ok(Some(next_token))`: If there are more pages, returns the next_token
+/// - `Ok(None)`: If this is the last page
+/// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If processing fails
+async fn process_search_results(
+    json_response: &serde_json::Value,
+    pool: &PgPool,
+    config: &mut TwitterConfig,
+) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
+    // Create maps of user ID to user info for quick lookup
+    let mut users_username_map = std::collections::HashMap::new();
+    let mut users_name_map = std::collections::HashMap::new();
+    let mut users_created_at_map = std::collections::HashMap::new();
+    if let Some(includes) = json_response.get("includes") {
+        if let Some(users) = includes.get("users") {
+            if let Some(users_array) = users.as_array() {
+                for user in users_array {
+                    if let (Some(id), Some(username), Some(name), Some(created_at_str)) = (
+                        user.get("id"),
+                        user.get("username"),
+                        user.get("name"),
+                        user.get("created_at"),
+                    ) {
+                        if let (
+                            Some(id_str),
+                            Some(username_str),
+                            Some(name_str),
+                            Some(created_at_str),
+                        ) = (
+                            id.as_str(),
+                            username.as_str(),
+                            name.as_str(),
+                            created_at_str.as_str(),
+                        ) {
+                            users_username_map.insert(id_str.to_string(), username_str.to_string());
+                            users_name_map.insert(id_str.to_string(), name_str.to_string());
+
+                            // Parse and store created_at timestamp
+                            match chrono::DateTime::parse_from_rfc3339(created_at_str) {
+                                Ok(dt) => {
+                                    let created_at_utc = dt.with_timezone(&chrono::Utc);
+                                    users_created_at_map.insert(id_str.to_string(), created_at_utc);
+
+                                    // Save user data to database
+                                    if let Err(e) = crate::db::save_user(
+                                        pool,
+                                        id_str,
+                                        username_str,
+                                        name_str,
+                                        created_at_utc,
+                                    )
+                                    .await
+                                    {
+                                        error!(
+                                            "Failed to save user data for {}: {}",
+                                            username_str, e
+                                        );
+                                    }
+                                }
+                                Err(e) => {
+                                    error!(
+                                        "Failed to parse user created_at '{}': {}",
+                                        created_at_str, e
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Extract tweets from the response
+    if let Some(data) = json_response.get("data") {
+        if let Some(tweets) = data.as_array() {
+            if tweets.is_empty() {
+                info!("No tweets found in this page");
+            } else {
+                info!("Found {} tweets in this page", tweets.len());
+                for (i, tweet) in tweets.iter().enumerate() {
+                    if let Some(text) = tweet.get("text") {
+                        if let Some(id) = tweet.get("id") {
+                            // Extract created_at timestamp
+                            let created_at_str = tweet.get("created_at").and_then(|v| v.as_str());
+                            let created_at = if let Some(created_at_str) = created_at_str {
+                                // Parse ISO 8601 timestamp from Twitter API
+                                match chrono::DateTime::parse_from_rfc3339(created_at_str) {
+                                    Ok(dt) => dt.with_timezone(&chrono::Utc),
+                                    Err(e) => {
+                                        error!(
+                                            "Failed to parse created_at '{}': {}",
+                                            created_at_str, e
+                                        );
+                                        continue;
+                                    }
+                                }
+                            } else {
+                                error!("Tweet {} missing created_at field", id);
+                                continue;
+                            };
+
+                            info!("Tweet {} (ID: {}): {}", i + 1, id, text);
+
+                            // Extract poster information
+                            let poster_user_id = tweet.get("author_id").and_then(|v| v.as_str());
+                            let poster_username =
+                                poster_user_id.and_then(|user_id| users_username_map.get(user_id));
+                            let poster_name =
+                                poster_user_id.and_then(|user_id| users_name_map.get(user_id));
+
+                            // Extract vibe_emitter from @mentions in tweet text
+                            let vibe_emitter_username =
+                                extract_first_mention(text.as_str().unwrap_or(""));
+
+                            if let (
+                                Some(poster_id),
+                                Some(poster_username),
+                                Some(poster_display_name),
+                            ) = (poster_user_id, poster_username, poster_name)
+                            {
+                                if let Some(vibe_emitter_username) = &vibe_emitter_username {
+                                    info!(
+                                        "  Poster (vibe receiver): {} (@{})",
+                                        poster_display_name, poster_username
+                                    );
+                                    info!("  Vibe emitter: {}", vibe_emitter_username);
+
+                                    // First check if the emitter user exists in the database
+                                    let user_info = match crate::db::get_user_info_by_username(
+                                        pool,
+                                        vibe_emitter_username,
+                                    )
+                                    .await
+                                    {
+                                        Ok(Some((user_id, name, created_at))) => {
+                                            // User found in database, use cached info
+                                            info!(
+                                                "Using cached user info for @{} from database",
+                                                vibe_emitter_username
+                                            );
+                                            Some((user_id, name, created_at))
+                                        }
+                                        Ok(None) => {
+                                            // User not in database, look up via Twitter API
+                                            info!("User @{} not found in database, looking up via Twitter API", vibe_emitter_username);
+                                            match lookup_user_by_username(
+                                                config,
+                                                pool,
+                                                vibe_emitter_username,
+                                            )
+                                            .await
+                                            {
+                                                Ok(Some((user_id, name, created_at))) => {
+                                                    // Save the user data for future use
+                                                    if let Err(e) = crate::db::save_user(
+                                                        pool,
+                                                        &user_id,
+                                                        vibe_emitter_username,
+                                                        &name,
+                                                        created_at,
+                                                    )
+                                                    .await
+                                                    {
+                                                        error!(
+                                                            "Failed to save emitter user data: {}",
+                                                            e
+                                                        );
+                                                    }
+                                                    Some((user_id, name, created_at))
+                                                }
+                                                Ok(None) => {
+                                                    warn!(
+                                                        "Emitter user {} not found via Twitter API",
+                                                        vibe_emitter_username
+                                                    );
+                                                    None
+                                                }
+                                                Err(e) => {
+                                                    error!(
+                                                        "Failed to lookup emitter user {} via Twitter API: {}",
+                                                        vibe_emitter_username, e
+                                                    );
+                                                    None
+                                                }
+                                            }
+                                        }
+                                        Err(e) => {
+                                            error!(
+                                                "Failed to check database for user @{}: {}",
+                                                vibe_emitter_username, e
+                                            );
+                                            None
+                                        }
+                                    };
+
+                                    // If we have user info (either from cache or API), save the good vibes data
+                                    if let Some((emitter_user_id, _, _)) = user_info {
+                                        // First check if this tweet has already been processed
+                                        match crate::db::has_good_vibes_tweet(
+                                            pool,
+                                            id.as_str().unwrap(),
+                                        )
+                                        .await
+                                        {
+                                            Ok(true) => {
+                                                info!("Skipping tweet {} - already processed for good vibes", id.as_str().unwrap());
+                                            }
+                                            Ok(false) => {
+                                                // Tweet not processed yet, save the good vibes data
+                                                if let Err(e) = crate::db::save_good_vibes(
+                                                    pool,
+                                                    id.as_str().unwrap(), // tweet_id
+                                                    &emitter_user_id, // emitter_id (person who sent good vibes)
+                                                    poster_id, // sensor_id (person who received good vibes)
+                                                    created_at, // created_at from tweet
+                                                )
+                                                .await
+                                                {
+                                                    error!("Failed to save good vibes data: {}", e);
+                                                }
+                                            }
+                                            Err(e) => {
+                                                error!("Failed to check if tweet {} has been processed: {}", id.as_str().unwrap(), e);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            info!("Tweet {}: {}", i + 1, text);
+                        }
+                    }
+                }
+            }
+        } else {
+            warn!("Unexpected response format: data is not an array");
+        }
+    } else {
+        info!("No tweets found in this page");
+    }
+
+    // Check for next_token for pagination
+    let next_token = json_response
+        .get("meta")
+        .and_then(|meta| meta.get("next_token"))
+        .and_then(|token| token.as_str())
+        .map(|s| s.to_string());
+
+    Ok(next_token)
+}
+
 /// Searches for tweets with a specific hashtag in the past 24 hours and saves good vibes data.
 ///
 /// This function uses the Twitter API v2 search endpoint to find tweets containing
 /// the specified hashtag that were posted within the past 24 hours. It extracts vibe
 /// emitter (poster) and vibe receiver (mentioned user) information and saves it
 /// to the database. It uses OAuth 2.0 User Context Access Token authentication for v2 endpoints.
+///
+/// The function uses pagination to ensure all tweets with the hashtag are processed,
+/// including replies that might appear on later pages of results.
 ///
 /// # Parameters
 ///
@@ -532,278 +785,83 @@ pub async fn search_tweets_with_hashtag(
     let start_time = chrono::DateTime::from_timestamp(twenty_four_hours_ago as i64, 0)
         .unwrap()
         .format("%Y-%m-%dT%H:%M:%S.000Z");
-    let url = format!(
-        "https://api.x.com/2/tweets/search/recent?query={}&start_time={}&max_results=100&expansions=author_id&user.fields=id,username,name,created_at&tweet.fields=created_at",
-        urlencoding::encode(&query),
-        start_time
-    );
-
-    info!("Search URL: {}", url);
-    debug!("Search query: {}", query);
-    debug!("Start time (24 hours ago): {}", start_time);
 
     // Build the Authorization header with OAuth 2.0 User Context Access Token
     info!("Building OAuth 2.0 User Context authorization header for search");
     let auth_header = build_oauth2_user_context_header(&config.access_token);
 
-    // Log request details
-    info!("Sending GET request to Twitter API v2 search endpoint");
-    debug!("Request URL: {}", url);
-    debug!("Request headers: Authorization: Bearer [REDACTED]");
+    let mut next_token: Option<String> = None;
+    let mut page_count = 0;
 
-    // Create the request builder
-    let request_builder = client.get(&url).header("Authorization", auth_header);
+    loop {
+        page_count += 1;
+        info!("Fetching page {} of search results", page_count);
 
-    // Use the authenticated request helper with automatic token refresh
-    let response_text =
-        make_authenticated_request(&mut config, &pool, request_builder, "search_tweets").await?;
-
-    debug!("Search response body: {}", response_text);
-    let json_response: serde_json::Value = serde_json::from_str(&response_text)?;
-
-    // Create maps of user ID to user info for quick lookup
-    let mut users_username_map = std::collections::HashMap::new();
-    let mut users_name_map = std::collections::HashMap::new();
-    let mut users_created_at_map = std::collections::HashMap::new();
-    if let Some(includes) = json_response.get("includes") {
-        if let Some(users) = includes.get("users") {
-            if let Some(users_array) = users.as_array() {
-                for user in users_array {
-                    if let (Some(id), Some(username), Some(name), Some(created_at_str)) = (
-                        user.get("id"),
-                        user.get("username"),
-                        user.get("name"),
-                        user.get("created_at"),
-                    ) {
-                        if let (
-                            Some(id_str),
-                            Some(username_str),
-                            Some(name_str),
-                            Some(created_at_str),
-                        ) = (
-                            id.as_str(),
-                            username.as_str(),
-                            name.as_str(),
-                            created_at_str.as_str(),
-                        ) {
-                            users_username_map.insert(id_str.to_string(), username_str.to_string());
-                            users_name_map.insert(id_str.to_string(), name_str.to_string());
-
-                            // Parse and store created_at timestamp
-                            match chrono::DateTime::parse_from_rfc3339(created_at_str) {
-                                Ok(dt) => {
-                                    let created_at_utc = dt.with_timezone(&chrono::Utc);
-                                    users_created_at_map.insert(id_str.to_string(), created_at_utc);
-
-                                    // Save user data to database
-                                    if let Err(e) = crate::db::save_user(
-                                        &pool,
-                                        id_str,
-                                        username_str,
-                                        name_str,
-                                        created_at_utc,
-                                    )
-                                    .await
-                                    {
-                                        error!(
-                                            "Failed to save user data for {}: {}",
-                                            username_str, e
-                                        );
-                                    }
-                                }
-                                Err(e) => {
-                                    error!(
-                                        "Failed to parse user created_at '{}': {}",
-                                        created_at_str, e
-                                    );
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Extract tweets from the response
-    if let Some(data) = json_response.get("data") {
-        if let Some(tweets) = data.as_array() {
-            if tweets.is_empty() {
-                info!(
-                    "No tweets found with hashtag #{} in the past 24 hours",
-                    hashtag
-                );
-            } else {
-                info!(
-                    "Found {} tweets with hashtag #{} in the past 24 hours:",
-                    tweets.len(),
-                    hashtag
-                );
-                for (i, tweet) in tweets.iter().enumerate() {
-                    if let Some(text) = tweet.get("text") {
-                        if let Some(id) = tweet.get("id") {
-                            // Extract created_at timestamp
-                            let created_at_str = tweet.get("created_at").and_then(|v| v.as_str());
-                            let created_at = if let Some(created_at_str) = created_at_str {
-                                // Parse ISO 8601 timestamp from Twitter API
-                                match chrono::DateTime::parse_from_rfc3339(created_at_str) {
-                                    Ok(dt) => dt.with_timezone(&chrono::Utc),
-                                    Err(e) => {
-                                        error!(
-                                            "Failed to parse created_at '{}': {}",
-                                            created_at_str, e
-                                        );
-                                        continue;
-                                    }
-                                }
-                            } else {
-                                error!("Tweet {} missing created_at field", id);
-                                continue;
-                            };
-
-                            info!("Tweet {} (ID: {}): {}", i + 1, id, text);
-
-                            // Extract poster information
-                            let poster_user_id = tweet.get("author_id").and_then(|v| v.as_str());
-                            let poster_username =
-                                poster_user_id.and_then(|user_id| users_username_map.get(user_id));
-                            let poster_name =
-                                poster_user_id.and_then(|user_id| users_name_map.get(user_id));
-
-                            // Extract vibe_emitter from @mentions in tweet text
-                            let vibe_emitter_username =
-                                extract_first_mention(text.as_str().unwrap_or(""));
-
-                            if let (
-                                Some(poster_id),
-                                Some(poster_username),
-                                Some(poster_display_name),
-                            ) = (poster_user_id, poster_username, poster_name)
-                            {
-                                if let Some(vibe_emitter_username) = &vibe_emitter_username {
-                                    info!(
-                                        "  Poster (vibe receiver): {} (@{})",
-                                        poster_display_name, poster_username
-                                    );
-                                    info!("  Vibe emitter: {}", vibe_emitter_username);
-
-                                    // First check if the emitter user exists in the database
-                                    let user_info = match crate::db::get_user_info_by_username(
-                                        &pool,
-                                        vibe_emitter_username,
-                                    )
-                                    .await
-                                    {
-                                        Ok(Some((user_id, name, created_at))) => {
-                                            // User found in database, use cached info
-                                            info!(
-                                                "Using cached user info for @{} from database",
-                                                vibe_emitter_username
-                                            );
-                                            Some((user_id, name, created_at))
-                                        }
-                                        Ok(None) => {
-                                            // User not in database, look up via Twitter API
-                                            info!("User @{} not found in database, looking up via Twitter API", vibe_emitter_username);
-                                            match lookup_user_by_username(
-                                                &mut config,
-                                                &pool,
-                                                vibe_emitter_username,
-                                            )
-                                            .await
-                                            {
-                                                Ok(Some((user_id, name, created_at))) => {
-                                                    // Save the user data for future use
-                                                    if let Err(e) = crate::db::save_user(
-                                                        &pool,
-                                                        &user_id,
-                                                        vibe_emitter_username,
-                                                        &name,
-                                                        created_at,
-                                                    )
-                                                    .await
-                                                    {
-                                                        error!(
-                                                            "Failed to save emitter user data: {}",
-                                                            e
-                                                        );
-                                                    }
-                                                    Some((user_id, name, created_at))
-                                                }
-                                                Ok(None) => {
-                                                    warn!(
-                                                        "Emitter user {} not found via Twitter API",
-                                                        vibe_emitter_username
-                                                    );
-                                                    None
-                                                }
-                                                Err(e) => {
-                                                    error!(
-                                                        "Failed to lookup emitter user {} via Twitter API: {}",
-                                                        vibe_emitter_username, e
-                                                    );
-                                                    None
-                                                }
-                                            }
-                                        }
-                                        Err(e) => {
-                                            error!(
-                                                "Failed to check database for user @{}: {}",
-                                                vibe_emitter_username, e
-                                            );
-                                            None
-                                        }
-                                    };
-
-                                    // If we have user info (either from cache or API), save the good vibes data
-                                    if let Some((emitter_user_id, _, _)) = user_info {
-                                        // First check if this tweet has already been processed
-                                        match crate::db::has_good_vibes_tweet(
-                                            &pool,
-                                            id.as_str().unwrap(),
-                                        )
-                                        .await
-                                        {
-                                            Ok(true) => {
-                                                info!("Skipping tweet {} - already processed for good vibes", id.as_str().unwrap());
-                                            }
-                                            Ok(false) => {
-                                                // Tweet not processed yet, save the good vibes data
-                                                if let Err(e) = crate::db::save_good_vibes(
-                                                    &pool,
-                                                    id.as_str().unwrap(), // tweet_id
-                                                    &emitter_user_id, // emitter_id (person who sent good vibes)
-                                                    poster_id, // sensor_id (person who received good vibes)
-                                                    created_at, // created_at from tweet
-                                                )
-                                                .await
-                                                {
-                                                    error!("Failed to save good vibes data: {}", e);
-                                                }
-                                            }
-                                            Err(e) => {
-                                                error!("Failed to check if tweet {} has been processed: {}", id.as_str().unwrap(), e);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        } else {
-                            info!("Tweet {}: {}", i + 1, text);
-                        }
-                    }
-                }
-            }
+        // Build URL with pagination token if available
+        let url = if let Some(token) = &next_token {
+            format!(
+                "https://api.x.com/2/tweets/search/recent?query={}&start_time={}&max_results=100&expansions=author_id,referenced_tweets.id&user.fields=id,username,name,created_at&tweet.fields=created_at,conversation_id,in_reply_to_user_id,in_reply_to_status_id&next_token={}",
+                urlencoding::encode(&query),
+                start_time,
+                token
+            )
         } else {
-            warn!("Unexpected response format: data is not an array");
-        }
-    } else {
+            format!(
+                "https://api.x.com/2/tweets/search/recent?query={}&start_time={}&max_results=100&expansions=author_id,referenced_tweets.id&user.fields=id,username,name,created_at&tweet.fields=created_at,conversation_id,in_reply_to_user_id,in_reply_to_status_id",
+                urlencoding::encode(&query),
+                start_time
+            )
+        };
+
+        info!("Search URL: {}", url);
+        debug!("Search query: {}", query);
+        debug!("Start time (24 hours ago): {}", start_time);
+
+        // Log request details
         info!(
-            "No tweets found with hashtag #{} in the past 24 hours",
-            hashtag
+            "Sending GET request to Twitter API v2 search endpoint (page {})",
+            page_count
         );
+        debug!("Request URL: {}", url);
+        debug!("Request headers: Authorization: Bearer [REDACTED]");
+
+        // Create the request builder
+        let request_builder = client
+            .get(&url)
+            .header("Authorization", auth_header.clone());
+
+        // Use the authenticated request helper with automatic token refresh
+        let response_text = make_authenticated_request(
+            &mut config,
+            &pool,
+            request_builder,
+            &format!("search_tweets_page_{}", page_count),
+        )
+        .await?;
+
+        debug!("Search response body: {}", response_text);
+        let json_response: serde_json::Value = serde_json::from_str(&response_text)?;
+
+        // Process this page of results
+        next_token = process_search_results(&json_response, &pool, &mut config).await?;
+
+        // Break if no more pages
+        if next_token.is_none() {
+            info!("No more pages to fetch");
+            break;
+        }
+
+        // Safety check to prevent infinite loops (limit to 10 pages)
+        if page_count >= 10 {
+            warn!("Reached maximum page limit (10), stopping pagination");
+            break;
+        }
     }
 
+    info!(
+        "Completed search for hashtag #{} - processed {} pages",
+        hashtag, page_count
+    );
     Ok(())
 }
 

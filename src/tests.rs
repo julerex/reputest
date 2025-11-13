@@ -264,67 +264,70 @@ fn test_get_server_port() {
 /// mention patterns with question marks, including cases with and without @ symbols.
 #[test]
 fn test_extract_mention_with_question() {
-    // Test cases with @ symbol
-    // Test case with space before question mark (like "@reputest @callanable ?")
+    // Test cases that should match - exact format "@reputest username ?" or "@reputest @username ?"
+
+    // Test case with @ symbol and space before question mark
     assert_eq!(
         extract_mention_with_question("@reputest @callanable ?"),
         Some("callanable".to_string())
     );
 
-    // Test case without space before question mark
+    // Test case with @ symbol and no space before question mark
     assert_eq!(
         extract_mention_with_question("@reputest @user?"),
         Some("user".to_string())
     );
 
-    // Test case with multiple spaces
+    // Test case with @ symbol and multiple spaces
     assert_eq!(
         extract_mention_with_question("@reputest @testuser   ?"),
         Some("testuser".to_string())
     );
 
-    // Test cases without @ symbol
-    // Test case with space before question mark (like "@reputest callanable ?")
+    // Test case without @ symbol and space before question mark
     assert_eq!(
         extract_mention_with_question("@reputest callanable ?"),
         Some("callanable".to_string())
     );
 
-    // Test case without space before question mark
+    // Test case without @ symbol and no space before question mark
     assert_eq!(
         extract_mention_with_question("@reputest user?"),
         Some("user".to_string())
     );
 
-    // Test case with multiple spaces
+    // Test case without @ symbol and multiple spaces
     assert_eq!(
         extract_mention_with_question("@reputest testuser   ?"),
         Some("testuser".to_string())
     );
 
-    // Test case with the bot mention followed by question mark (should extract the bot username)
-    assert_eq!(
-        extract_mention_with_question("@reputest ?"),
-        Some("reputest".to_string())
-    );
+    // Test cases that should return None - doesn't match the required format
 
-    // Test cases that should return None
-    // Test case with no question mark pattern
+    // Test case with the bot mention followed by question mark (should not match as there's no username)
+    assert_eq!(extract_mention_with_question("@reputest ?"), None);
+
+    // Test case with no question mark
     assert_eq!(extract_mention_with_question("@reputest hello"), None);
-
-    // Test case with a word followed by ? (should match if it's not excluded)
-    assert_eq!(
-        extract_mention_with_question("@reputest hello ?"),
-        Some("hello".to_string())
-    );
 
     // Test case with only the bot mention
     assert_eq!(extract_mention_with_question("@reputest"), None);
 
-    // Test cases with excluded words
+    // Test cases that don't start with @reputest
+    assert_eq!(extract_mention_with_question("hello @user?"), None);
+    assert_eq!(extract_mention_with_question("@user?"), None);
+
+    // Test cases with excluded words (but these won't match anyway due to the strict format)
     assert_eq!(extract_mention_with_question("@reputest what?"), None);
     assert_eq!(extract_mention_with_question("@reputest why?"), None);
     assert_eq!(extract_mention_with_question("@reputest reputest?"), None);
+
+    // Test cases with extra content before or after
+    assert_eq!(extract_mention_with_question("Hey @reputest @user?"), None);
+    assert_eq!(
+        extract_mention_with_question("@reputest @user? More text"),
+        None
+    );
 }
 
 /// Integration test for the pagerank-style vibe scoring algorithm.
