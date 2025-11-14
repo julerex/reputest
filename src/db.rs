@@ -797,8 +797,8 @@ pub async fn get_vibe_score_one(
 
 /// Calculates the second-degree vibe score (paths of length 2) between two users.
 ///
-/// This function counts the number of paths of length exactly 2 from emitter to sensor
-/// in the good vibes graph (emitter -> X -> sensor).
+/// This function counts the number of acyclic paths of length exactly 2 from emitter to sensor
+/// in the good vibes graph (emitter -> X -> sensor), where all nodes in each path are distinct.
 ///
 /// # Parameters
 ///
@@ -826,6 +826,9 @@ pub async fn get_vibe_score_two(
         FROM good_vibes g1
         JOIN good_vibes g2 ON g1.sensor_id = g2.emitter_id
         WHERE g1.emitter_id = $1 AND g2.sensor_id = $2
+          AND g1.emitter_id != g1.sensor_id
+          AND g1.emitter_id != g2.sensor_id
+          AND g1.sensor_id != g2.sensor_id
         "#,
     )
     .bind(emitter_user_id)
@@ -844,8 +847,8 @@ pub async fn get_vibe_score_two(
 
 /// Calculates the third-degree vibe score (paths of length 3) between two users.
 ///
-/// This function counts the number of paths of length exactly 3 from emitter to sensor
-/// in the good vibes graph (emitter -> X -> Y -> sensor).
+/// This function counts the number of acyclic paths of length exactly 3 from emitter to sensor
+/// in the good vibes graph (emitter -> X -> Y -> sensor), where all nodes in each path are distinct.
 ///
 /// # Parameters
 ///
@@ -874,6 +877,12 @@ pub async fn get_vibe_score_three(
         JOIN good_vibes g2 ON g1.sensor_id = g2.emitter_id
         JOIN good_vibes g3 ON g2.sensor_id = g3.emitter_id
         WHERE g1.emitter_id = $1 AND g3.sensor_id = $2
+          AND g1.emitter_id != g1.sensor_id
+          AND g1.emitter_id != g2.sensor_id
+          AND g1.emitter_id != g3.sensor_id
+          AND g1.sensor_id != g2.sensor_id
+          AND g1.sensor_id != g3.sensor_id
+          AND g2.sensor_id != g3.sensor_id
         "#,
     )
     .bind(emitter_user_id)
