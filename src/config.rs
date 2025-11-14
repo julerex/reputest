@@ -260,7 +260,7 @@ impl TwitterConfig {
         &mut self,
         pool: &PgPool,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        info!("Attempting to refresh access token");
+        debug!("Attempting to refresh access token");
 
         // Check if we have all required credentials for refresh
         let (client_id, client_secret, refresh_token) = match (
@@ -292,7 +292,7 @@ impl TwitterConfig {
         // Attempt to refresh the token
         match refresh_access_token(client_id, client_secret, refresh_token).await {
             Ok((new_access_token, new_refresh_token)) => {
-                info!("Access token refreshed successfully");
+                debug!("Access token refreshed successfully");
 
                 // Update the access token in the config
                 let old_token_length = self.access_token.len();
@@ -304,7 +304,7 @@ impl TwitterConfig {
                     warn!("Failed to save access token to database: {}", e);
                     warn!("Access token updated in memory only");
                 } else {
-                    info!("Access token successfully saved to database");
+                    debug!("Access token successfully saved to database");
                 }
 
                 // Update refresh token if a new one was provided

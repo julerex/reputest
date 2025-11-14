@@ -19,14 +19,14 @@ pub async fn get_db_pool() -> Result<PgPool, Box<dyn std::error::Error + Send + 
     let database_url =
         env::var("DATABASE_URL").map_err(|_| "DATABASE_URL environment variable is not set")?;
 
-    info!("Connecting to PostgreSQL database");
+    debug!("Connecting to PostgreSQL database");
     debug!(
         "Database URL (masked): {}...",
         &database_url[..std::cmp::min(database_url.len(), 20)]
     );
 
     let pool = PgPool::connect(&database_url).await?;
-    info!("Successfully connected to PostgreSQL database");
+    debug!("Successfully connected to PostgreSQL database");
 
     Ok(pool)
 }
@@ -148,7 +148,7 @@ pub async fn save_refresh_token(
 pub async fn get_latest_access_token(
     pool: &PgPool,
 ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
-    info!("Querying database for latest access token");
+    debug!("Querying database for latest access token");
 
     let row = sqlx::query(
         r#"
@@ -207,7 +207,7 @@ pub async fn save_access_token(
     pool: &PgPool,
     token: &str,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    info!("Storing new access token in database");
+    debug!("Storing new access token in database");
 
     let token_length = token.len();
     let masked_token = if token_length > 16 {
@@ -229,7 +229,7 @@ pub async fn save_access_token(
     .execute(pool)
     .await?;
 
-    info!("Successfully stored new access token in database");
+    debug!("Successfully stored new access token in database");
     Ok(())
 }
 

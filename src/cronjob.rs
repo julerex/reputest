@@ -16,8 +16,8 @@ use tokio_cron_scheduler::{Job, JobScheduler};
 ///
 /// This function creates a new job scheduler and adds a job that runs every 5 minutes
 /// to perform two tasks:
-/// 1. Search for tweets containing the hashtag "gmgv" from the past 24 hours
-/// 2. Check for mentions of @reputest from the past 24 hours and reply to:
+/// 1. Search for tweets containing the hashtag "gmgv" from the past 6 hours
+/// 2. Check for mentions of @reputest from the past 6 hours and reply to:
 ///    - Specific vibe score queries (e.g., "@reputest @username?")
 ///    - General requests for the total vibes count (messages containing "vibecount")
 ///
@@ -96,7 +96,7 @@ async fn process_mentions() {
             };
 
             // Reply to each mention
-            for (tweet_id, tweet_text, author_username, mentioned_user) in mentions {
+            for (tweet_id, tweet_text, author_username, mentioned_user, created_at) in mentions {
                 if let Some(mentioned_username) = mentioned_user {
                     process_vibe_query(
                         &pool,
@@ -110,7 +110,7 @@ async fn process_mentions() {
                     process_vibecount_request(&pool, &tweet_id, &tweet_text, &author_username)
                         .await;
                 } else {
-                    info!("Skipping general mention from @{} - no vibecount request or specific vibe query", author_username);
+                    info!("Skipping general mention from @{} at {} - no vibecount request or specific vibe query", author_username, created_at);
                 }
             }
 
@@ -199,7 +199,7 @@ async fn process_vibe_query(
     }
 }
 
-/// Replies with a zero vibe score for users not found in the database
+/// Replies with a message for users not found in the database
 async fn reply_with_zero_score(
     pool: &PgPool,
     tweet_id: &str,
@@ -207,10 +207,10 @@ async fn reply_with_zero_score(
     mentioned_username: &str,
 ) {
     info!(
-        "Mentioned user @{} not found in database, returning vibe score 0",
+        "Mentioned user @{} not found in database, returning 'no vibes' message",
         mentioned_username
     );
-    let reply_text = format!("Your vibe score for @{} is 0", mentioned_username);
+    let reply_text = format!("@{} has no vibes", mentioned_username);
     info!(
         "Replying to vibe query tweet {} with: {} (user not found)",
         tweet_id, reply_text
