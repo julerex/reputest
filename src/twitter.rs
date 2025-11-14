@@ -350,7 +350,7 @@ pub async fn post_tweet(text: &str) -> Result<String, Box<dyn std::error::Error 
     debug!("Tweet payload: {}", serde_json::to_string_pretty(&payload)?);
 
     // Build the Authorization header with OAuth 2.0 User Context Access Token
-    info!("Building OAuth 2.0 User Context authorization header");
+    debug!("Building OAuth 2.0 User Context authorization header");
     let auth_header = build_oauth2_user_context_header(&config.access_token);
 
     // Log request details
@@ -422,7 +422,7 @@ pub async fn reply_to_tweet(
     debug!("Reply payload: {}", serde_json::to_string_pretty(&payload)?);
 
     // Build the Authorization header with OAuth 2.0 User Context Access Token
-    info!("Building OAuth 2.0 User Context authorization header");
+    debug!("Building OAuth 2.0 User Context authorization header");
     let auth_header = build_oauth2_user_context_header(&config.access_token);
 
     // Log request details
@@ -787,7 +787,7 @@ pub async fn search_tweets_with_hashtag(
         .format("%Y-%m-%dT%H:%M:%S.000Z");
 
     // Build the Authorization header with OAuth 2.0 User Context Access Token
-    info!("Building OAuth 2.0 User Context authorization header for search");
+    debug!("Building OAuth 2.0 User Context authorization header for search");
     let auth_header = build_oauth2_user_context_header(&config.access_token);
 
     let mut next_token: Option<String> = None;
@@ -800,14 +800,14 @@ pub async fn search_tweets_with_hashtag(
         // Build URL with pagination token if available
         let url = if let Some(token) = &next_token {
             format!(
-                "https://api.x.com/2/tweets/search/recent?query={}&start_time={}&max_results=100&expansions=author_id,referenced_tweets.id&user.fields=id,username,name,created_at&tweet.fields=created_at,conversation_id,in_reply_to_user_id,in_reply_to_status_id&next_token={}",
+                "https://api.x.com/2/tweets/search/recent?query={}&start_time={}&max_results=100&expansions=author_id,referenced_tweets.id&user.fields=id,username,name,created_at&tweet.fields=created_at,conversation_id,in_reply_to_user_id&next_token={}",
                 urlencoding::encode(&query),
                 start_time,
                 token
             )
         } else {
             format!(
-                "https://api.x.com/2/tweets/search/recent?query={}&start_time={}&max_results=100&expansions=author_id,referenced_tweets.id&user.fields=id,username,name,created_at&tweet.fields=created_at,conversation_id,in_reply_to_user_id,in_reply_to_status_id",
+                "https://api.x.com/2/tweets/search/recent?query={}&start_time={}&max_results=100&expansions=author_id,referenced_tweets.id&user.fields=id,username,name,created_at&tweet.fields=created_at,conversation_id,in_reply_to_user_id",
                 urlencoding::encode(&query),
                 start_time
             )
@@ -917,7 +917,7 @@ pub async fn search_mentions(
     debug!("Start time (24 hours ago): {}", start_time);
 
     // Build the Authorization header with OAuth 2.0 User Context Access Token
-    info!("Building OAuth 2.0 User Context authorization header for mentions search");
+    debug!("Building OAuth 2.0 User Context authorization header for mentions search");
     let auth_header = build_oauth2_user_context_header(&config.access_token);
 
     // Log request details

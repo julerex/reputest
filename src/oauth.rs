@@ -4,7 +4,7 @@
 //! authentication for all Twitter API v2 operations including posting tweets
 //! and searching tweets. It also includes automatic token refresh functionality.
 
-use log::{debug, error, info, warn};
+use log::{debug, error, warn};
 use std::collections::HashMap;
 
 /// Builds the Authorization header for OAuth 2.0 User Context authentication.
@@ -58,7 +58,7 @@ pub fn build_oauth2_user_context_header(access_token: &str) -> String {
         format!("{}...", token_prefix)
     };
 
-    info!(
+    debug!(
         "Building OAuth 2.0 User Context header with token length: {}",
         token_length
     );
@@ -118,7 +118,7 @@ pub async fn refresh_access_token(
     client_secret: &str,
     refresh_token: &str,
 ) -> Result<(String, Option<String>), Box<dyn std::error::Error + Send + Sync>> {
-    info!("Starting OAuth 2.0 access token refresh process");
+    debug!("Starting OAuth 2.0 access token refresh process");
 
     // Log token info (masked for security)
     let refresh_token_length = refresh_token.len();
@@ -141,7 +141,7 @@ pub async fn refresh_access_token(
         format!("{}...", refresh_token_prefix)
     };
 
-    info!("Refresh token length: {}", refresh_token_length);
+    debug!("Refresh token length: {}", refresh_token_length);
     debug!("Refresh token (masked): {}", masked_refresh_token);
     debug!(
         "Client ID (masked): {}...",
@@ -155,7 +155,7 @@ pub async fn refresh_access_token(
     let client = reqwest::Client::new();
     let url = "https://api.twitter.com/2/oauth2/token";
 
-    info!("Making token refresh request to: {}", url);
+    debug!("Making token refresh request to: {}", url);
 
     let mut params = HashMap::new();
     params.insert("grant_type", "refresh_token");
@@ -171,11 +171,11 @@ pub async fn refresh_access_token(
         .await?;
 
     let status = response.status();
-    info!("Token refresh response status: {}", status);
+    debug!("Token refresh response status: {}", status);
 
     if status.is_success() {
         let response_text = response.text().await?;
-        info!("Token refresh successful");
+        debug!("Token refresh successful");
         debug!("Token refresh response body: {}", response_text);
 
         // Parse the JSON response to extract access_token
@@ -202,7 +202,7 @@ pub async fn refresh_access_token(
                 format!("{}...", new_token_prefix)
             };
 
-            info!(
+            debug!(
                 "New access token obtained with length: {}",
                 new_token_length
             );
@@ -232,7 +232,7 @@ pub async fn refresh_access_token(
                     format!("{}...", new_refresh_prefix)
                 };
 
-                info!(
+                debug!(
                     "New refresh token also provided with length: {}",
                     new_refresh_length
                 );
@@ -245,16 +245,16 @@ pub async fn refresh_access_token(
 
             // Check token expiration
             if let Some(expires_in) = json.get("expires_in").and_then(|v| v.as_u64()) {
-                info!("New access token expires in {} seconds", expires_in);
+                debug!("New access token expires in {} seconds", expires_in);
                 let hours = expires_in / 3600;
                 let minutes = (expires_in % 3600) / 60;
                 if hours > 0 {
-                    info!(
+                    debug!(
                         "Token will expire in {} hours and {} minutes",
                         hours, minutes
                     );
                 } else {
-                    info!("Token will expire in {} minutes", minutes);
+                    debug!("Token will expire in {} minutes", minutes);
                 }
             }
 
