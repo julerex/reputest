@@ -263,7 +263,7 @@ pub async fn save_good_vibes(
         tweet_id, emitter_id, sensor_id, created_at
     );
 
-    sqlx::query(
+    match sqlx::query(
         r#"
         INSERT INTO good_vibes (tweet_id, emitter_id, sensor_id, created_at)
         VALUES ($1, $2, $3, $4)
@@ -274,10 +274,26 @@ pub async fn save_good_vibes(
     .bind(sensor_id)
     .bind(created_at)
     .execute(pool)
-    .await?;
-
-    info!("Successfully stored good vibes data in database");
-    Ok(())
+    .await
+    {
+        Ok(_) => {
+            info!("Successfully stored good vibes data in database");
+            Ok(())
+        }
+        Err(sqlx::Error::Database(db_err)) => {
+            // Check if this is a unique constraint violation (primary key or unique constraint)
+            if db_err.code() == Some("23505".into()) {
+                info!(
+                    "Skipping duplicate good vibes record: tweet {} from {} to {} (already exists)",
+                    tweet_id, emitter_id, sensor_id
+                );
+                Ok(())
+            } else {
+                Err(Box::new(sqlx::Error::Database(db_err)))
+            }
+        }
+        Err(e) => Err(Box::new(e)),
+    }
 }
 
 /// Stores user data in the database.

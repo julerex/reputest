@@ -25,21 +25,22 @@ CREATE TABLE users (
 );
 
 CREATE TABLE good_vibes (
-    tweet_id TEXT PRIMARY KEY,
+    tweet_id TEXT,
     emitter_id TEXT NOT NULL REFERENCES users(id),
     sensor_id TEXT NOT NULL REFERENCES users(id),
     created_at TIMESTAMP WITH TIME ZONE NOT NULL
+    PRIMARY KEY (emitter_id, sensor_id)
 );
 
 CREATE TABLE vibe_requests (
     tweet_id TEXT PRIMARY KEY
 );
 
-CREATE VIEW good_vibes_view AS
+CREATE VIEW view_good_vibes AS
 SELECT
     gv.tweet_id,
-    emitter.username AS emitter_username,
     sensor.username AS sensor_username,
+    emitter.username AS emitter_username,
     gv.created_at
 FROM good_vibes gv
 JOIN users emitter ON gv.emitter_id = emitter.id

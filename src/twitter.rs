@@ -668,6 +668,7 @@ async fn process_search_results(
                                             }
                                             Ok(false) => {
                                                 // Tweet not processed yet, save the good vibes data
+                                                // Note: save_good_vibes handles constraint violations gracefully with INFO logging
                                                 if let Err(e) = crate::db::save_good_vibes(
                                                     pool,
                                                     id.as_str().unwrap(), // tweet_id
@@ -677,7 +678,7 @@ async fn process_search_results(
                                                 )
                                                 .await
                                                 {
-                                                    error!("Failed to save good vibes data: {}", e);
+                                                    error!("Failed to save good vibes data (non-constraint error): {}", e);
                                                 }
                                             }
                                             Err(e) => {
