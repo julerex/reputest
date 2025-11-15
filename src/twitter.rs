@@ -35,6 +35,28 @@ fn extract_first_mention(text: &str) -> Option<String> {
         .map(|s| s.to_string())
 }
 
+/// Extracts the first @mention from tweet text where #gmgv directly follows the mention (with optional spaces),
+/// excluding the specified username if provided.
+/// This ensures vibes are only recorded when #gmgv immediately follows a username mention.
+/// Examples: "@alice #gmgv" ✓, "@alice has #gmgv" ✗
+pub(crate) fn extract_vibe_mention(text: &str, exclude_username: Option<&str>) -> Option<String> {
+    // Use regex to find @mentions followed directly by #gmgv (with optional spaces)
+    // Pattern: @username\s*#gmgv
+    let re = regex::Regex::new(r"@(\w+)\s*#gmgv").ok()?;
+
+    // Find captures and check each one
+    for cap in re.captures_iter(text) {
+        if let Some(username_match) = cap.get(1) {
+            let username = username_match.as_str();
+            if Some(username) != exclude_username {
+                return Some(username.to_string());
+            }
+        }
+    }
+
+    None
+}
+
 /// Extracts a username from a tweet that specifically queries the bot in the format "@reputest username ?" or "@reputest @username ?".
 ///
 /// This function only matches the exact patterns where a tweet starts with "@reputest"
@@ -569,9 +591,16 @@ async fn process_search_results(
                             let poster_name =
                                 poster_user_id.and_then(|user_id| users_name_map.get(user_id));
 
-                            // Extract vibe_emitter from @mentions in tweet text
+                            // Check if this is a reply and get the username to exclude
+                            let reply_target_username = tweet
+                                .get("in_reply_to_user_id")
+                                .and_then(|v| v.as_str())
+                                .and_then(|user_id| users_username_map.get(user_id))
+                                .map(|s| s.as_str());
+
+                            // Extract vibe_emitter from @mentions in tweet text, excluding reply target if applicable
                             let vibe_emitter_username =
-                                extract_first_mention(text.as_str().unwrap_or(""));
+                                extract_vibe_mention(text.as_str().unwrap_or(""), reply_target_username);
 
                             if let (
                                 Some(poster_id),
