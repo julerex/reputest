@@ -13,8 +13,6 @@ use crate::db;
 use crate::oauth::build_oauth2_user_context_header;
 use sqlx::PgPool;
 
-/// Extracts the first @mention username from a tweet text.
-///
 /// This function looks for @username patterns in the tweet text and returns
 /// the first username found (without the @ symbol). If no mentions are found,
 /// it returns None.
@@ -27,14 +25,7 @@ use sqlx::PgPool;
 ///
 /// - `Some(username)`: The first mentioned username if found
 /// - `None`: If no mentions are found
-fn extract_first_mention(text: &str) -> Option<String> {
-    // Use regex to find @mentions (word characters after @)
-    let re = regex::Regex::new(r"@(\w+)").ok()?;
-    re.find(text)
-        .and_then(|mat| mat.as_str().strip_prefix('@'))
-        .map(|s| s.to_string())
-}
-
+///
 /// Extracts the first @mention from tweet text where #gmgv directly follows the mention (with optional spaces),
 /// excluding the specified username if provided.
 /// This ensures vibes are only recorded when #gmgv immediately follows a username mention.
@@ -599,8 +590,10 @@ async fn process_search_results(
                                 .map(|s| s.as_str());
 
                             // Extract vibe_emitter from @mentions in tweet text, excluding reply target if applicable
-                            let vibe_emitter_username =
-                                extract_vibe_mention(text.as_str().unwrap_or(""), reply_target_username);
+                            let vibe_emitter_username = extract_vibe_mention(
+                                text.as_str().unwrap_or(""),
+                                reply_target_username,
+                            );
 
                             if let (
                                 Some(poster_id),
