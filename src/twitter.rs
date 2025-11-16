@@ -686,7 +686,13 @@ async fn process_search_results(
                                         .await
                                         {
                                             Ok(true) => {
-                                                info!("Skipping tweet {} - already processed for good vibes", id.as_str().unwrap());
+                                                info!(
+                                                    "Skipping tweet {} from @{} mentioning @{} (posted at {}) - already processed for good vibes",
+                                                    id.as_str().unwrap(),
+                                                    poster_username,
+                                                    vibe_emitter_username,
+                                                    created_at
+                                                );
                                             }
                                             Ok(false) => {
                                                 // Tweet not processed yet, save the good vibes data

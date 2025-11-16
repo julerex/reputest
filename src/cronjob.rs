@@ -104,11 +104,18 @@ async fn process_mentions() {
                         &tweet_text,
                         &author_username,
                         &mentioned_username,
+                        &created_at,
                     )
                     .await;
                 } else if tweet_text.to_lowercase().contains("vibecount") {
-                    process_vibecount_request(&pool, &tweet_id, &tweet_text, &author_username)
-                        .await;
+                    process_vibecount_request(
+                        &pool,
+                        &tweet_id,
+                        &tweet_text,
+                        &author_username,
+                        &created_at,
+                    )
+                    .await;
                 } else {
                     info!("Skipping general mention from @{} at {} - no vibecount request or specific vibe query", author_username, created_at);
                 }
@@ -129,11 +136,15 @@ async fn process_vibe_query(
     _tweet_text: &str,
     author_username: &str,
     mentioned_username: &str,
+    created_at: &str,
 ) {
     // First, check if this tweet has already been processed
     match has_vibe_request(pool, tweet_id).await {
         Ok(true) => {
-            info!("Skipping vibe query tweet {} - already processed", tweet_id);
+            info!(
+                "Skipping vibe query tweet {} from @{} asking about @{} (posted at {}) - already processed",
+                tweet_id, author_username, mentioned_username, created_at
+            );
             return;
         }
         Ok(false) => {
@@ -242,13 +253,14 @@ async fn process_vibecount_request(
     tweet_id: &str,
     _tweet_text: &str,
     author_username: &str,
+    created_at: &str,
 ) {
     // First, check if this tweet has already been processed
     match has_vibe_request(pool, tweet_id).await {
         Ok(true) => {
             info!(
-                "Skipping vibecount request tweet {} - already processed",
-                tweet_id
+                "Skipping vibecount request tweet {} from @{} (posted at {}) - already processed",
+                tweet_id, author_username, created_at
             );
             return;
         }
