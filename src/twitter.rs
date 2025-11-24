@@ -90,6 +90,47 @@ pub fn extract_mention_with_question(text: &str) -> Option<String> {
     None
 }
 
+/// Gets the authenticated user's ID using the Twitter API v2.
+///
+/// This function makes a request to the Twitter API to get information about
+/// the authenticated user, including their ID.
+///
+/// # Parameters
+///
+/// - `config`: Mutable reference to TwitterConfig (may be updated with new token)
+/// - `pool`: A reference to the PostgreSQL connection pool
+///
+/// # Returns
+///
+/// - `Ok(String)`: The authenticated user's ID
+/// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the API request fails
+async fn get_authenticated_user_id(
+    config: &mut TwitterConfig,
+    pool: &PgPool,
+) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    info!("Getting authenticated user ID");
+
+    let client = Client::new();
+    let url = "https://api.x.com/2/users/me?user.fields=id";
+
+    let auth_header = build_oauth2_user_context_header(&config.access_token);
+    let request_builder = client.get(url).header("Authorization", auth_header);
+
+    let response_text =
+        make_authenticated_request(config, pool, request_builder, "get_authenticated_user").await?;
+    let json_response: serde_json::Value = serde_json::from_str(&response_text)?;
+
+    if let Some(data) = json_response.get("data") {
+        if let Some(id) = data.get("id").and_then(|v| v.as_str()) {
+            info!("Authenticated user ID: {}", id);
+            return Ok(id.to_string());
+        }
+    }
+
+    error!("Failed to get authenticated user ID from API response");
+    Err("Failed to get authenticated user ID".into())
+}
+
 /// Looks up a user by username using the Twitter API v2.
 ///
 /// This function makes a request to the Twitter API to get user information
@@ -298,6 +339,97 @@ async fn make_authenticated_request(
         operation_name, status, error_text
     )
     .into())
+}
+
+/// Likes a tweet using the Twitter/X API v2 endpoint.
+///
+/// This function uses OAuth 2.0 User Context authentication to like a tweet
+/// on the Twitter/X API v2 endpoint. It builds the proper authorization header
+/// and sends the request with the tweet ID to like.
+///
+/// # Parameters
+///
+/// - `tweet_id`: The ID of the tweet to like
+///
+/// # Returns
+///
+/// - `Ok(String)`: The API response body on successful like
+/// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If authentication fails, network error, or API error
+///
+/// # Requirements
+///
+/// The following must be available:
+/// - Database connection (DATABASE_URL environment variable)
+/// - Access token in the `access_tokens` table (OAuth 2.0 User Context Access Token for liking tweets)
+///
+/// # Example
+///
+/// ```rust
+/// use reputest::like_tweet;
+///
+/// #[tokio::main]
+/// async fn main() {
+///     let result = like_tweet("1234567890123456789").await;
+///     match result {
+///         Ok(response) => println!("Tweet liked: {}", response),
+///         Err(e) => eprintln!("Failed to like tweet: {}", e),
+///     }
+/// }
+/// ```
+///
+/// # Errors
+///
+/// This function can fail for several reasons:
+/// - Missing or invalid Twitter API credentials
+/// - Network connectivity issues
+/// - Twitter API rate limiting or other API errors
+/// - Invalid tweet ID
+/// - Tweet already liked
+pub async fn like_tweet(tweet_id: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    info!("Starting tweet like operation for tweet ID: '{}'", tweet_id);
+
+    // Get database pool and load Twitter API credentials from database
+    info!("Loading Twitter configuration from database");
+    let pool = db::get_db_pool().await?;
+    let mut config = TwitterConfig::from_env(&pool).await?;
+    debug!("Twitter config loaded successfully");
+
+    // Get the authenticated user's ID
+    let user_id = get_authenticated_user_id(&mut config, &pool).await?;
+    info!("Authenticated user ID: {}", user_id);
+
+    let client = Client::new();
+    let url = format!("https://api.x.com/2/users/{}/likes", user_id);
+    info!("Target URL: {}", url);
+
+    // Create the like payload
+    let payload = json!({
+        "tweet_id": tweet_id
+    });
+    debug!("Like payload: {}", serde_json::to_string_pretty(&payload)?);
+
+    // Build the Authorization header with OAuth 2.0 User Context Access Token
+    debug!("Building OAuth 2.0 User Context authorization header");
+    let auth_header = build_oauth2_user_context_header(&config.access_token);
+
+    // Log request details
+    info!("Sending POST request to Twitter API v2 for like");
+    debug!("Request URL: {}", url);
+    debug!("Request headers: Authorization: Bearer [REDACTED], Content-Type: application/json");
+    debug!(
+        "Request payload: {}",
+        serde_json::to_string_pretty(&payload)?
+    );
+
+    // Create the request builder
+    let request_builder = client
+        .post(url)
+        .header("Authorization", auth_header)
+        .header("Content-Type", "application/json")
+        .json(&payload);
+
+    // Use the authenticated request helper with automatic token refresh
+    make_authenticated_request(&mut config, &pool, request_builder, "like_tweet").await
 }
 
 /// Posts a tweet to Twitter/X using the API v2 endpoint.
@@ -707,6 +839,16 @@ async fn process_search_results(
                                                 .await
                                                 {
                                                     error!("Failed to save good vibes data (non-constraint error): {}", e);
+                                                } else {
+                                                    // Successfully saved good vibes data, now like the tweet
+                                                    let tweet_id = id.as_str().unwrap();
+                                                    info!("Liking tweet {} after successfully recording good vibes", tweet_id);
+                                                    if let Err(e) = like_tweet(tweet_id).await {
+                                                        warn!("Failed to like tweet {}: {}", tweet_id, e);
+                                                        // Don't fail the entire process if liking fails - it's not critical
+                                                    } else {
+                                                        info!("Successfully liked tweet {}", tweet_id);
+                                                    }
                                                 }
                                             }
                                             Err(e) => {
