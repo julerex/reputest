@@ -925,3 +925,4 @@ pub async fn get_vibe_score(
 ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
     get_vibe_score_two(pool, sensor_user_id, emitter_user_id).await
 }
+

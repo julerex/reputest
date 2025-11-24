@@ -7,19 +7,20 @@ use crate::db::{
     get_good_vibes_count, get_user_id_by_username, get_vibe_score_one, get_vibe_score_three,
     get_vibe_score_two, has_vibe_request, save_vibe_request,
 };
-use crate::twitter::{reply_to_tweet, search_mentions, search_tweets_with_hashtag};
+use crate::twitter::{reply_to_dm, reply_to_tweet, search_direct_messages, search_mentions, search_tweets_with_hashtag};
 use log::{error, info};
 use sqlx::PgPool;
 use tokio_cron_scheduler::{Job, JobScheduler};
 
-/// Starts the cronjob scheduler for searching tweets with hashtag "gmgv" and processing vibe queries every 5 minutes.
+/// Starts the cronjob scheduler for searching tweets with hashtag "gmgv", processing vibe queries, and checking DMs every 5 minutes.
 ///
 /// This function creates a new job scheduler and adds a job that runs every 5 minutes
-/// to perform two tasks:
+/// to perform three tasks:
 /// 1. Search for tweets containing the hashtag "gmgv" from the past 6 hours
 /// 2. Check for mentions of @reputest from the past 6 hours and reply to:
 ///    - Specific vibe score queries (e.g., "@reputest @username?")
 ///    - General requests for the total vibes count (messages containing "vibecount")
+/// 3. Check for direct messages to @reputest from the past 6 hours and reply with "Hello User!"
 ///
 /// The job will log all found tweets and mentions to the application logs.
 ///
@@ -70,6 +71,78 @@ async fn process_hashtag_search() {
         }
         Err(e) => {
             error!("Scheduled search for #gmgv tweets failed: {}", e);
+        }
+    }
+}
+
+/// Processes scheduled checks for direct messages to @reputest and replies with "Hello User!"
+async fn process_direct_messages() {
+    info!("Starting scheduled check for direct messages to @reputest");
+    match search_direct_messages().await {
+        Ok(dms) => {
+            if dms.is_empty() {
+                info!("No direct messages found to reply to");
+                return;
+            }
+
+            info!("Found {} direct messages to reply to", dms.len());
+
+            // Get the database pool for user lookups and DM checks
+            let pool = match crate::db::get_db_pool().await {
+                Ok(pool) => pool,
+                Err(e) => {
+                    error!("Failed to get database pool for DM processing: {}", e);
+                    return;
+                }
+            };
+
+            // Reply to each DM
+            for (dm_id, dm_text, sender_username, created_at) in dms {
+                process_dm_reply(&pool, &dm_id, &dm_text, &sender_username, &created_at).await;
+            }
+
+            info!("Scheduled check for direct messages completed successfully");
+        }
+        Err(e) => {
+            error!("Scheduled check for direct messages failed: {}", e);
+        }
+    }
+}
+
+/// Processes a direct message and replies with "Hello User!"
+async fn process_dm_reply(
+    pool: &sqlx::PgPool,
+    dm_id: &str,
+    _dm_text: &str,
+    sender_username: &str,
+    _created_at: &str,
+) {
+    // Get the sender's user ID from database
+    let sender_user_id = match crate::db::get_user_id_by_username(pool, sender_username).await {
+        Ok(Some(id)) => id,
+        Ok(None) => {
+            error!("Could not find user ID for DM sender @{}", sender_username);
+            return;
+        }
+        Err(e) => {
+            error!("Failed to get user ID for @{}: {}", sender_username, e);
+            return;
+        }
+    };
+
+    // Reply with "Hello User!"
+    let reply_text = format!("Hello {}!", sender_username);
+    info!("Replying to DM {} with: {}", dm_id, reply_text);
+
+    match reply_to_dm(&reply_text, &sender_user_id).await {
+        Ok(_) => {
+            info!("Successfully replied to DM from @{}", sender_username);
+        }
+        Err(e) => {
+            error!(
+                "Failed to reply to DM from @{}: {}",
+                sender_username, e
+            );
         }
     }
 }
@@ -330,6 +403,7 @@ pub async fn start_gmgv_cronjob() -> Result<JobScheduler, Box<dyn std::error::Er
             Box::pin(async {
                 process_hashtag_search().await;
                 process_mentions().await;
+                process_direct_messages().await;
             })
         })?)
         .await?;
