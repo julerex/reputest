@@ -388,6 +388,11 @@ async fn make_authenticated_request(
 pub async fn like_tweet(tweet_id: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     info!("Starting tweet like operation for tweet ID: '{}'", tweet_id);
 
+    // Validate tweet ID format (should be numeric string, 1-19 digits)
+    if !tweet_id.chars().all(|c| c.is_numeric()) || tweet_id.len() == 0 || tweet_id.len() > 19 {
+        return Err(format!("Invalid tweet ID format: '{}' (must be numeric string, 1-19 digits)", tweet_id).into());
+    }
+
     // Get database pool and load Twitter API credentials from database
     info!("Loading Twitter configuration from database");
     let pool = db::get_db_pool().await?;
@@ -429,7 +434,19 @@ pub async fn like_tweet(tweet_id: &str) -> Result<String, Box<dyn std::error::Er
         .json(&payload);
 
     // Use the authenticated request helper with automatic token refresh
-    make_authenticated_request(&mut config, &pool, request_builder, "like_tweet").await
+    let result = make_authenticated_request(&mut config, &pool, request_builder, "like_tweet").await;
+
+    match &result {
+        Ok(response) => {
+            info!("Like request successful for tweet {}", tweet_id);
+            debug!("Like response: {}", response);
+        }
+        Err(e) => {
+            warn!("Like request failed for tweet {}: {}", tweet_id, e);
+        }
+    }
+
+    result
 }
 
 /// Posts a tweet to Twitter/X using the API v2 endpoint.
@@ -843,11 +860,14 @@ async fn process_search_results(
                                                     // Successfully saved good vibes data, now like the tweet
                                                     let tweet_id = id.as_str().unwrap();
                                                     info!("Liking tweet {} after successfully recording good vibes", tweet_id);
-                                                    if let Err(e) = like_tweet(tweet_id).await {
-                                                        warn!("Failed to like tweet {}: {}", tweet_id, e);
-                                                        // Don't fail the entire process if liking fails - it's not critical
-                                                    } else {
-                                                        info!("Successfully liked tweet {}", tweet_id);
+                                                    match like_tweet(tweet_id).await {
+                                                        Ok(response) => {
+                                                            info!("Successfully liked tweet {}: {}", tweet_id, response);
+                                                        }
+                                                        Err(e) => {
+                                                            warn!("Failed to like tweet {}: {}", tweet_id, e);
+                                                            // Don't fail the entire process if liking fails - it's not critical
+                                                        }
                                                     }
                                                 }
                                             }
