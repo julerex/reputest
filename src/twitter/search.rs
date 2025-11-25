@@ -13,7 +13,7 @@ use crate::db;
 use crate::oauth::build_oauth2_user_context_header;
 
 use super::api::{lookup_user_by_username, make_authenticated_request};
-use super::parsing::{extract_mention_with_question, extract_vibe_mention};
+use super::parsing::{extract_mention_with_question, extract_vibe_emitter};
 use super::tweets::reply_to_tweet;
 
 /// Processes a single page of tweet search results and saves good vibes data.
@@ -147,11 +147,11 @@ async fn process_search_results(
                                 .and_then(|user_id| users_username_map.get(user_id))
                                 .map(|s| s.as_str());
 
-                            // Extract vibe_emitter from @mentions in tweet text, excluding reply target if applicable
-                            let vibe_emitter_username = extract_vibe_mention(
-                                text.as_str().unwrap_or(""),
-                                reply_target_username,
-                            );
+                            // Extract vibe_emitter from tweet text, excluding reply target if applicable
+                            // Handles both "@username #gmgv" and "username #gmgv" formats
+                            let tweet_text = text.as_str().unwrap_or("");
+                            let vibe_emitter_username =
+                                extract_vibe_emitter(tweet_text, reply_target_username);
 
                             if let (
                                 Some(poster_id),
@@ -214,6 +214,26 @@ async fn process_search_results(
                                                         "Emitter user {} not found via Twitter API",
                                                         vibe_emitter_username
                                                     );
+                                                    // Reply to let them know the user wasn't found
+                                                    let tweet_id = id.as_str().unwrap();
+                                                    let reply_text = format!(
+                                                        "I couldn't find a Twitter user with the handle '{}'. Please check the spelling and try again.",
+                                                        vibe_emitter_username
+                                                    );
+                                                    info!("Replying to tweet {} with user not found message: {}", tweet_id, reply_text);
+                                                    match reply_to_tweet(&reply_text, tweet_id)
+                                                        .await
+                                                    {
+                                                        Ok(response) => {
+                                                            info!("Successfully replied to tweet {}: {}", tweet_id, response);
+                                                        }
+                                                        Err(e) => {
+                                                            warn!(
+                                                                "Failed to reply to tweet {}: {}",
+                                                                tweet_id, e
+                                                            );
+                                                        }
+                                                    }
                                                     None
                                                 }
                                                 Err(e) => {
@@ -317,7 +337,7 @@ async fn process_search_results(
                                                             // Successfully saved good vibes data, now reply to the tweet confirming good vibes were recorded
                                                             let tweet_id = id.as_str().unwrap();
                                                             let reply_text = format!(
-                                                                "Your good vibes from @{} have been noted.",
+                                                                "Your good vibes from {} have been noted.",
                                                                 vibe_emitter_username
                                                             );
                                                             info!("Replying to tweet {} with confirmation: {}", tweet_id, reply_text);

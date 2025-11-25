@@ -29,7 +29,7 @@ use crate::{
     handlers::{
         handle_health, handle_reputest_get, handle_reputest_post, handle_root, handle_tweet,
     },
-    twitter::{extract_mention_with_question, extract_vibe_mention},
+    twitter::{extract_mention_with_question, extract_vibe_emitter},
 };
 use axum::{
     body::Body,
@@ -330,82 +330,94 @@ fn test_extract_mention_with_question() {
     );
 }
 
-/// Unit test for the extract_vibe_mention function.
+/// Unit test for the extract_vibe_emitter function.
 ///
-/// This test verifies that the function only extracts @mentions where #gmgv directly follows,
-/// while optionally excluding a specified username (used for reply handling).
+/// This test verifies that the function extracts the word immediately before #gmgv,
+/// stripping @ if present, and excluding common English words.
 #[test]
-fn test_extract_vibe_mention() {
-    // Test direct proximity match (no spaces)
+fn test_extract_vibe_emitter() {
+    // Test direct proximity match with @ (no spaces)
     assert_eq!(
-        extract_vibe_mention("@alice#gmgv", None),
+        extract_vibe_emitter("@alice#gmgv", None),
         Some("alice".to_string())
     );
 
-    // Test proximity match with space
+    // Test proximity match with @ and space
     assert_eq!(
-        extract_vibe_mention("@alice #gmgv", None),
+        extract_vibe_emitter("@alice #gmgv", None),
         Some("alice".to_string())
     );
 
-    // Test proximity match with multiple spaces
+    // Test proximity match with @ and multiple spaces
     assert_eq!(
-        extract_vibe_mention("@alice   #gmgv", None),
+        extract_vibe_emitter("@alice   #gmgv", None),
         Some("alice".to_string())
     );
 
-    // Test that non-proximity matches are ignored
+    // Test direct proximity match WITHOUT @ (no spaces)
     assert_eq!(
-        extract_vibe_mention("@alice has good vibes #gmgv", None),
-        None // #gmgv doesn't directly follow @alice
+        extract_vibe_emitter("alice#gmgv", None),
+        Some("alice".to_string())
+    );
+
+    // Test proximity match WITHOUT @ and space
+    assert_eq!(
+        extract_vibe_emitter("alice #gmgv", None),
+        Some("alice".to_string())
+    );
+
+    // Test proximity match WITHOUT @ and multiple spaces
+    assert_eq!(
+        extract_vibe_emitter("alice   #gmgv", None),
+        Some("alice".to_string())
     );
 
     // Test reply tweet - excluded username doesn't get vibes even with proximity
     assert_eq!(
-        extract_vibe_mention("@bob #gmgv @alice #gmgv too", Some("bob")),
+        extract_vibe_emitter("@bob #gmgv @alice #gmgv too", Some("bob")),
         Some("alice".to_string()) // bob is excluded, alice gets vibes
     );
 
     // Test reply tweet where excluded user has proximity match
     assert_eq!(
-        extract_vibe_mention("@bob #gmgv thanks!", Some("bob")),
+        extract_vibe_emitter("@bob #gmgv thanks!", Some("bob")),
         None // bob has proximity match but is excluded
     );
 
     // Test multiple proximity matches - picks first valid one
     assert_eq!(
-        extract_vibe_mention("@alice #gmgv @bob #gmgv", None),
+        extract_vibe_emitter("@alice #gmgv @bob #gmgv", None),
         Some("alice".to_string()) // picks first proximity match
-    );
-
-    // Test mixed proximity and non-proximity
-    assert_eq!(
-        extract_vibe_mention("@alice #gmgv @bob has vibes #gmgv", None),
-        Some("alice".to_string()) // only alice has proximity match
-    );
-
-    // Test no proximity matches at all
-    assert_eq!(
-        extract_vibe_mention("@alice @bob you both have #gmgv", None),
-        None // no direct proximity matches
     );
 
     // Test case sensitivity
     assert_eq!(
-        extract_vibe_mention("@Alice #gmgv", Some("alice")),
+        extract_vibe_emitter("@Alice #gmgv", Some("alice")),
         Some("Alice".to_string()) // "alice" != "Alice" so Alice is not excluded
     );
 
     // Test thread scenario with proximity
     assert_eq!(
-        extract_vibe_mention("@user1 @user2 #gmgv @user3 also here", Some("user1")),
+        extract_vibe_emitter("@user1 @user2 #gmgv @user3 also here", Some("user1")),
         Some("user2".to_string()) // user2 has proximity match, user1 excluded
     );
 
-    // Test thread scenario without proximity for remaining users
+    // Test non-mention in sentence context
     assert_eq!(
-        extract_vibe_mention("@user1 @user2 @user3 you all rock #gmgv", Some("user1")),
-        None // no direct proximity matches after excluding user1
+        extract_vibe_emitter("Shoutout to johndoe #gmgv", None),
+        Some("johndoe".to_string())
+    );
+
+    // Test that common English words are filtered out
+    assert_eq!(
+        extract_vibe_emitter("this is good #gmgv", None),
+        None // "good" is a common word
+    );
+
+    // Test that common English words are filtered out
+    assert_eq!(
+        extract_vibe_emitter("sending vibes #gmgv", None),
+        None // "vibes" is a common word
     );
 }
 

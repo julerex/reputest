@@ -196,7 +196,7 @@ async fn process_vibe_query(
     ) {
         Ok((score_one, score_two, score_three)) => {
             let reply_text = format!(
-                "Your vibes for @{} are:\n1st degree: {}\n2nd degree: {}\n3rd degree: {}",
+                "Your vibes for {} are:\n1st degree: {}\n2nd degree: {}\n3rd degree: {}",
                 mentioned_username, score_one, score_two, score_three
             );
             send_reply_and_mark_processed(pool, &reply_text, tweet_id, author_username).await;
@@ -221,11 +221,7 @@ async fn reply_with_zero_score(
         "Mentioned user @{} not found in database, returning 'no vibes' message",
         mentioned_username
     );
-    let reply_text = format!("@{} has no vibes", mentioned_username);
-    info!(
-        "Replying to vibe query tweet {} with: {} (user not found)",
-        tweet_id, reply_text
-    );
+    let reply_text = format!("{} has no good vibes recorded yet.", mentioned_username);
 
     match reply_to_tweet(&reply_text, tweet_id).await {
         Ok(_) => {

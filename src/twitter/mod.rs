@@ -17,4 +17,4 @@ pub use tweets::{post_tweet, reply_to_tweet};
 
 // Crate-internal re-exports (used by tests)
 #[allow(unused_imports)]
-pub(crate) use parsing::extract_vibe_mention;
+pub(crate) use parsing::extract_vibe_emitter;
