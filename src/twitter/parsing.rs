@@ -76,4 +76,3 @@ pub fn extract_mention_with_question(text: &str) -> Option<String> {
 
     None
 }
-

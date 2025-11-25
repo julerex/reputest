@@ -422,6 +422,52 @@ pub async fn has_good_vibes_record(
     Ok(exists)
 }
 
+/// Retrieves the tweet ID from an existing good vibes record between emitter and sensor.
+///
+/// This function queries the good_vibes table to find the tweet_id for a given emitter-sensor pair.
+/// It returns the most recent tweet_id (by created_at) if multiple records exist.
+///
+/// # Parameters
+///
+/// - `pool`: A reference to the PostgreSQL connection pool
+/// - `emitter_id`: The user ID of the person who sent the good vibes
+/// - `sensor_id`: The user ID of the person who received the good vibes
+///
+/// # Returns
+///
+/// - `Ok(Some(tweet_id))`: If a good vibes record exists, returns the tweet_id
+/// - `Ok(None)`: If no good vibes record exists between these users
+/// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the query fails
+pub async fn get_good_vibes_tweet_id(
+    pool: &PgPool,
+    emitter_id: &str,
+    sensor_id: &str,
+) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
+    info!(
+        "Getting tweet ID for good vibes record between emitter {} and sensor {}",
+        emitter_id, sensor_id
+    );
+
+    let tweet_id: Option<String> = sqlx::query_scalar(
+        r#"
+        SELECT tweet_id FROM good_vibes
+        WHERE emitter_id = $1 AND sensor_id = $2
+        ORDER BY created_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(emitter_id)
+    .bind(sensor_id)
+    .fetch_optional(pool)
+    .await?;
+
+    info!(
+        "Good vibes tweet ID lookup result: {:?} (emitter: {}, sensor: {})",
+        tweet_id, emitter_id, sensor_id
+    );
+    Ok(tweet_id)
+}
+
 /// Retrieves a user ID by username from the database.
 ///
 /// This function queries the users table to find the user ID for a given username.
@@ -925,4 +971,3 @@ pub async fn get_vibe_score(
 ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
     get_vibe_score_two(pool, sensor_user_id, emitter_user_id).await
 }
-

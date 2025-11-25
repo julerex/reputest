@@ -155,47 +155,6 @@ pub(crate) async fn make_authenticated_request(
     .into())
 }
 
-/// Gets the authenticated user's ID using the Twitter API v2.
-///
-/// This function makes a request to the Twitter API to get information about
-/// the authenticated user, including their ID.
-///
-/// # Parameters
-///
-/// - `config`: Mutable reference to TwitterConfig (may be updated with new token)
-/// - `pool`: A reference to the PostgreSQL connection pool
-///
-/// # Returns
-///
-/// - `Ok(String)`: The authenticated user's ID
-/// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the API request fails
-pub(crate) async fn get_authenticated_user_id(
-    config: &mut TwitterConfig,
-    pool: &PgPool,
-) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-    info!("Getting authenticated user ID");
-
-    let client = Client::new();
-    let url = "https://api.x.com/2/users/me?user.fields=id";
-
-    let auth_header = build_oauth2_user_context_header(&config.access_token);
-    let request_builder = client.get(url).header("Authorization", auth_header);
-
-    let response_text =
-        make_authenticated_request(config, pool, request_builder, "get_authenticated_user").await?;
-    let json_response: serde_json::Value = serde_json::from_str(&response_text)?;
-
-    if let Some(data) = json_response.get("data") {
-        if let Some(id) = data.get("id").and_then(|v| v.as_str()) {
-            info!("Authenticated user ID: {}", id);
-            return Ok(id.to_string());
-        }
-    }
-
-    error!("Failed to get authenticated user ID from API response");
-    Err("Failed to get authenticated user ID".into())
-}
-
 /// Looks up a user by username using the Twitter API v2.
 ///
 /// This function makes a request to the Twitter API to get user information
@@ -260,4 +219,3 @@ pub(crate) async fn lookup_user_by_username(
     warn!("User {} not found", username);
     Ok(None)
 }
-

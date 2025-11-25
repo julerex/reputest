@@ -14,7 +14,7 @@ use crate::oauth::build_oauth2_user_context_header;
 
 use super::api::{lookup_user_by_username, make_authenticated_request};
 use super::parsing::{extract_mention_with_question, extract_vibe_mention};
-use super::tweets::{like_tweet, reply_to_tweet};
+use super::tweets::reply_to_tweet;
 
 /// Processes a single page of tweet search results and saves good vibes data.
 ///
@@ -253,46 +253,92 @@ async fn process_search_results(
                                                 );
                                             }
                                             Ok(false) => {
-                                                // Tweet not processed yet, save the good vibes data
-                                                // Note: save_good_vibes handles constraint violations gracefully with INFO logging
-                                                if let Err(e) = crate::db::save_good_vibes(
+                                                // Tweet not processed yet, check if emitter has already given vibes to this sensor
+                                                match crate::db::has_good_vibes_record(
                                                     pool,
-                                                    id.as_str().unwrap(), // tweet_id
-                                                    &emitter_user_id, // emitter_id (person who sent good vibes)
-                                                    poster_id, // sensor_id (person who received good vibes)
-                                                    created_at, // created_at from tweet
+                                                    poster_id,
+                                                    &emitter_user_id,
                                                 )
                                                 .await
                                                 {
-                                                    error!("Failed to save good vibes data (non-constraint error): {}", e);
-                                                } else {
-                                                    // Successfully saved good vibes data, now like and reply to the tweet
-                                                    let tweet_id = id.as_str().unwrap();
-                                                    info!("Liking tweet {} after successfully recording good vibes", tweet_id);
-                                                    match like_tweet(tweet_id).await {
-                                                        Ok(response) => {
-                                                            info!("Successfully liked tweet {}: {}", tweet_id, response);
-                                                        }
-                                                        Err(e) => {
-                                                            warn!("Failed to like tweet {}: {}", tweet_id, e);
-                                                            // Don't fail the entire process if liking fails - it's not critical
+                                                    Ok(true) => {
+                                                        // Good vibes already exist, get the original tweet ID and reply with duplicate message
+                                                        match crate::db::get_good_vibes_tweet_id(
+                                                            pool,
+                                                            &emitter_user_id,
+                                                            poster_id,
+                                                        )
+                                                        .await
+                                                        {
+                                                            Ok(Some(original_tweet_id)) => {
+                                                                let tweet_id = id.as_str().unwrap();
+                                                                let tweet_url = format!("https://twitter.com/i/status/{}", original_tweet_id);
+                                                                let reply_text = format!(
+                                                                    "You've already indicated good vibes for @{}! See your previous tweet: {}",
+                                                                    poster_username, tweet_url
+                                                                );
+                                                                info!("Replying to tweet {} with duplicate vibes message: {}", tweet_id, reply_text);
+                                                                match reply_to_tweet(
+                                                                    &reply_text,
+                                                                    tweet_id,
+                                                                )
+                                                                .await
+                                                                {
+                                                                    Ok(response) => {
+                                                                        info!("Successfully replied to tweet {}: {}", tweet_id, response);
+                                                                    }
+                                                                    Err(e) => {
+                                                                        warn!("Failed to reply to tweet {}: {}", tweet_id, e);
+                                                                        // Don't fail the entire process if replying fails - it's not critical
+                                                                    }
+                                                                }
+                                                            }
+                                                            Ok(None) => {
+                                                                warn!("Good vibes record exists but no tweet_id found for emitter {} and sensor {}", emitter_user_id, poster_id);
+                                                            }
+                                                            Err(e) => {
+                                                                error!("Failed to get original tweet ID for duplicate vibes check: {}", e);
+                                                            }
                                                         }
                                                     }
-
-                                                    // Reply to the tweet confirming good vibes were recorded
-                                                    let reply_text = format!(
-                                                        "Your good vibes from @{} have been noted.",
-                                                        vibe_emitter_username
-                                                    );
-                                                    info!("Replying to tweet {} with confirmation: {}", tweet_id, reply_text);
-                                                    match reply_to_tweet(&reply_text, tweet_id).await {
-                                                        Ok(response) => {
-                                                            info!("Successfully replied to tweet {}: {}", tweet_id, response);
+                                                    Ok(false) => {
+                                                        // No existing good vibes, save the new good vibes data
+                                                        if let Err(e) = crate::db::save_good_vibes(
+                                                            pool,
+                                                            id.as_str().unwrap(), // tweet_id
+                                                            &emitter_user_id, // emitter_id (person who sent good vibes)
+                                                            poster_id, // sensor_id (person who received good vibes)
+                                                            created_at, // created_at from tweet
+                                                        )
+                                                        .await
+                                                        {
+                                                            error!("Failed to save good vibes data (non-constraint error): {}", e);
+                                                        } else {
+                                                            // Successfully saved good vibes data, now reply to the tweet confirming good vibes were recorded
+                                                            let tweet_id = id.as_str().unwrap();
+                                                            let reply_text = format!(
+                                                                "Your good vibes from @{} have been noted.",
+                                                                vibe_emitter_username
+                                                            );
+                                                            info!("Replying to tweet {} with confirmation: {}", tweet_id, reply_text);
+                                                            match reply_to_tweet(
+                                                                &reply_text,
+                                                                tweet_id,
+                                                            )
+                                                            .await
+                                                            {
+                                                                Ok(response) => {
+                                                                    info!("Successfully replied to tweet {}: {}", tweet_id, response);
+                                                                }
+                                                                Err(e) => {
+                                                                    warn!("Failed to reply to tweet {}: {}", tweet_id, e);
+                                                                    // Don't fail the entire process if replying fails - it's not critical
+                                                                }
+                                                            }
                                                         }
-                                                        Err(e) => {
-                                                            warn!("Failed to reply to tweet {}: {}", tweet_id, e);
-                                                            // Don't fail the entire process if replying fails - it's not critical
-                                                        }
+                                                    }
+                                                    Err(e) => {
+                                                        error!("Failed to check for existing good vibes record: {}", e);
                                                     }
                                                 }
                                             }
@@ -622,4 +668,3 @@ pub async fn search_mentions() -> Result<
 
     Ok(mentions)
 }
-
