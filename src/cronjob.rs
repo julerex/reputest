@@ -8,7 +8,7 @@ use crate::db::{
     get_vibe_score_two, has_vibe_request, save_vibe_request,
 };
 use crate::twitter::{reply_to_tweet, search_mentions, search_tweets_with_hashtag};
-use log::{error, info};
+use log::{debug, error, info};
 use sqlx::PgPool;
 use tokio_cron_scheduler::{Job, JobScheduler};
 
@@ -76,7 +76,7 @@ async fn process_hashtag_search() {
 
 /// Processes scheduled checks for @reputest mentions and replies to vibe queries
 async fn process_mentions() {
-    info!("Starting scheduled check for @reputest mentions");
+    debug!("Starting scheduled check for @reputest mentions");
     match search_mentions().await {
         Ok(mentions) => {
             if mentions.is_empty() {

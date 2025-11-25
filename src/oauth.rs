@@ -4,7 +4,7 @@
 //! authentication for all Twitter API v2 operations including posting tweets
 //! and searching tweets. It also includes automatic token refresh functionality.
 
-use log::{debug, error, warn};
+use log::{debug, error};
 use std::collections::HashMap;
 
 /// Builds the Authorization header for OAuth 2.0 User Context authentication.
@@ -237,7 +237,7 @@ pub async fn refresh_access_token(
                     new_refresh_length
                 );
                 debug!("New refresh token (masked): {}", masked_new_refresh);
-                warn!("New refresh token received - it will be saved to the database");
+                debug!("New refresh token received - it will be saved to the database");
                 Some(new_refresh_token.to_string())
             } else {
                 None

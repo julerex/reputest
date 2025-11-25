@@ -158,11 +158,11 @@ impl TwitterConfig {
         // Load optional refresh token from database
         let refresh_token = match db::get_latest_refresh_token(pool).await {
             Ok(Some(token)) => {
-                info!("Successfully loaded refresh token from database");
+                debug!("Successfully loaded refresh token from database");
                 Some(token)
             }
             Ok(None) => {
-                info!("No refresh token found in database");
+                warn!("No refresh token found in database");
                 None
             }
             Err(e) => {
@@ -174,7 +174,7 @@ impl TwitterConfig {
         // Load optional client credentials
         let client_id = match env::var("xapi_client_id") {
             Ok(id) => {
-                info!("Found xapi_client_id environment variable");
+                debug!("Found xapi_client_id environment variable");
                 debug!(
                     "Client ID (masked): {}...",
                     &id[..std::cmp::min(id.len(), 8)]
@@ -182,14 +182,14 @@ impl TwitterConfig {
                 Some(id)
             }
             Err(_) => {
-                info!("No xapi_client_id found in environment variables");
+                warn!("No xapi_client_id found in environment variables");
                 None
             }
         };
 
         let client_secret = match env::var("xapi_client_secret") {
             Ok(secret) => {
-                info!("Found xapi_client_secret environment variable");
+                debug!("Found xapi_client_secret environment variable");
                 debug!(
                     "Client secret (masked): {}...",
                     &secret[..std::cmp::min(secret.len(), 8)]
@@ -197,7 +197,7 @@ impl TwitterConfig {
                 Some(secret)
             }
             Err(_) => {
-                info!("No xapi_client_secret found in environment variables");
+                warn!("No xapi_client_secret found in environment variables");
                 None
             }
         };
@@ -214,14 +214,14 @@ impl TwitterConfig {
             client_secret,
         };
 
-        info!("Twitter configuration loaded successfully");
+        debug!("Twitter configuration loaded successfully");
         if config.refresh_token.is_some()
             && config.client_id.is_some()
             && config.client_secret.is_some()
         {
-            info!("Automatic token refresh is enabled");
+            debug!("Automatic token refresh is enabled");
         } else {
-            info!("Automatic token refresh is disabled - manual token refresh required");
+            debug!("Automatic token refresh is disabled - manual token refresh required");
         }
 
         Ok(config)
@@ -284,7 +284,7 @@ impl TwitterConfig {
             }
         };
 
-        info!("All required credentials available for token refresh");
+        debug!("All required credentials available for token refresh");
 
         // Import the refresh function from oauth module
         use crate::oauth::refresh_access_token;
@@ -309,7 +309,7 @@ impl TwitterConfig {
 
                 // Update refresh token if a new one was provided
                 if let Some(new_refresh) = new_refresh_token {
-                    info!("Updating refresh token with new token from Twitter");
+                    debug!("Updating refresh token with new token from Twitter");
                     self.refresh_token = Some(new_refresh.clone());
 
                     // Try to save to database
@@ -317,11 +317,11 @@ impl TwitterConfig {
                         warn!("Failed to save refresh token to database: {}", e);
                         warn!("Refresh token updated in memory only");
                     } else {
-                        info!("Refresh token successfully saved to database");
+                        debug!("Refresh token successfully saved to database");
                     }
                 }
 
-                info!(
+                debug!(
                     "Access token updated: old length {}, new length {}",
                     old_token_length, new_token_length
                 );

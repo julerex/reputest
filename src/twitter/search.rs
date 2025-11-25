@@ -274,8 +274,8 @@ async fn process_search_results(
                                                                 let tweet_id = id.as_str().unwrap();
                                                                 let tweet_url = format!("https://twitter.com/i/status/{}", original_tweet_id);
                                                                 let reply_text = format!(
-                                                                    "You've already indicated good vibes for @{}! See your previous tweet: {}",
-                                                                    poster_username, tweet_url
+                                                                    "You've already declared these vibes! See your previous tweet: {}",
+                                                                    tweet_url
                                                                 );
                                                                 info!("Replying to tweet {} with duplicate vibes message: {}", tweet_id, reply_text);
                                                                 match reply_to_tweet(
