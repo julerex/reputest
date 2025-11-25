@@ -403,7 +403,8 @@ pub async fn start_gmgv_cronjob() -> Result<JobScheduler, Box<dyn std::error::Er
             Box::pin(async {
                 process_hashtag_search().await;
                 process_mentions().await;
-                process_direct_messages().await;
+                // Direct message checking is disabled
+                // process_direct_messages().await;
             })
         })?)
         .await?;

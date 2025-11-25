@@ -106,6 +106,10 @@ db-connect: ## Connect to database
 
 # Test targets ############################################################
 
+# 'unset ARGV0' is needed to avoid the 
+# 'error: unknown proxy name: 'Cursor-2.1.26-x86_64'; valid proxy names' error
+# when running cargo and tests with Cursor.
+
 .PHONY: test
 test: ## Run tests
 	unset ARGV0 && cargo test --no-fail-fast 2>&1
