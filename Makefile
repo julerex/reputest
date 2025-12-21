@@ -110,6 +110,32 @@ fly-db-counts: ## Show record counts for all tables
 		FROM pg_tables WHERE schemaname = 'public' ORDER BY count DESC;" \
 		| fly mpg connect q49ypo4wvmzr17ln -d reputest -u fly-user
 
+.PHONY: fly-db-latest-vibes
+fly-db-latest-vibe-requests: ## Show latest 20 vibe_requests records
+	@echo "SELECT * FROM view_good_vibes ORDER BY created_at DESC LIMIT 20;" \
+		| fly mpg connect q49ypo4wvmzr17ln -d reputest -u fly-user
+
+.PHONY: fly-db-good-vibes-all 
+fly-db-good-vibes-all: ## Show all good_vibes records
+	@echo "SELECT * FROM good_vibes ORDER BY created_at DESC;" \
+		| fly mpg connect q49ypo4wvmzr17ln -d reputest -u fly-user
+
+.PHONY: fly-db-schema
+fly-db-schema: ## Show database schema
+	@echo "=== TABLES ==="
+	@echo "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;" | fly mpg connect q49ypo4wvmzr17ln -d reputest -u fly-user
+	@echo
+	@echo "=== INDEXES ==="
+	@echo "SELECT indexname FROM pg_indexes WHERE schemaname = 'public' ORDER BY indexname;" | fly mpg connect q49ypo4wvmzr17ln -d reputest -u fly-user
+	@echo
+	@echo "=== VIEWS ==="
+	@echo "SELECT viewname FROM pg_views WHERE schemaname = 'public' ORDER BY viewname;" | fly mpg connect q49ypo4wvmzr17ln -d reputest -u fly-user
+	@echo
+	@echo "=== MATERIALIZED VIEWS ==="
+	@echo "SELECT matviewname FROM pg_matviews WHERE schemaname = 'public' ORDER BY matviewname;" | fly mpg connect q49ypo4wvmzr17ln -d reputest -u fly-user
+
+
+
 
 # Test targets ############################################################
 
