@@ -99,9 +99,16 @@ bot-post-tweet: ## Post a tweet using interactive script
 
 # Database targets ############################################################
 
-.PHONY: db-connect
-db-connect: ## Connect to database
-	fly mpg connect -d reputest
+.PHONY: fly-db-connect
+fly-db-connect: ## Connect to database
+	fly mpg connect q49ypo4wvmzr17ln -d reputest -u fly-user
+
+.PHONY: fly-db-counts
+fly-db-counts: ## Show record counts for all tables
+	@echo "SELECT tablename AS table, \
+		(xpath('/row/count/text()', query_to_xml('SELECT COUNT(*) FROM ' || quote_ident(tablename), false, true, '')))[1]::text::bigint AS count \
+		FROM pg_tables WHERE schemaname = 'public' ORDER BY count DESC;" \
+		| fly mpg connect q49ypo4wvmzr17ln -d reputest -u fly-user
 
 
 # Test targets ############################################################
