@@ -971,3 +971,51 @@ pub async fn get_vibe_score(
 ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
     get_vibe_score_two(pool, sensor_user_id, emitter_user_id).await
 }
+
+/// Represents a row from the view_easy_good_vibes_degree_two view.
+#[derive(Debug)]
+pub struct EasyGoodVibesDegreeTwo {
+    pub sensor_username: String,
+    pub emitter_username: String,
+    pub degree_two_path_count: i64,
+}
+
+/// Retrieves all rows from the view_easy_good_vibes_degree_two view.
+///
+/// This function queries the view and returns all rows with sensor username,
+/// emitter username, and the degree two path count.
+///
+/// # Parameters
+///
+/// - `pool`: A reference to the PostgreSQL connection pool
+///
+/// # Returns
+///
+/// - `Ok(Vec<EasyGoodVibesDegreeTwo>)`: Vector of all rows from the view
+/// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the query fails
+pub async fn get_easy_good_vibes_degree_two(
+    pool: &PgPool,
+) -> Result<Vec<EasyGoodVibesDegreeTwo>, Box<dyn std::error::Error + Send + Sync>> {
+    info!("Querying view_easy_good_vibes_degree_two");
+
+    let rows = sqlx::query(
+        r#"
+        SELECT sensor_username, emitter_username, degree_two_path_count
+        FROM view_easy_good_vibes_degree_two
+        "#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut results = Vec::new();
+    for row in rows {
+        results.push(EasyGoodVibesDegreeTwo {
+            sensor_username: row.get("sensor_username"),
+            emitter_username: row.get("emitter_username"),
+            degree_two_path_count: row.get("degree_two_path_count"),
+        });
+    }
+
+    info!("Found {} rows in view_easy_good_vibes_degree_two", results.len());
+    Ok(results)
+}

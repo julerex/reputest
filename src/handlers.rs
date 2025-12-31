@@ -3,10 +3,16 @@
 //! This module contains all the HTTP route handler functions that process
 //! incoming requests and return appropriate responses.
 
-use axum::{http::StatusCode, response::Json};
+use axum::{
+    extract::State,
+    http::StatusCode,
+    response::{Html, Json},
+};
 use log::{error, info};
 use serde_json::{json, Value};
+use sqlx::PgPool;
 
+use crate::db::get_easy_good_vibes_degree_two;
 use crate::twitter::post_tweet;
 
 /// Handles GET requests to the `/reputest` endpoint.
@@ -114,12 +120,114 @@ pub async fn handle_tweet() -> Result<Json<Value>, (StatusCode, Json<Value>)> {
 
 /// Handles GET requests to the root `/` endpoint.
 ///
-/// This endpoint returns a welcome message for the reputest service.
-/// It serves as the main entry point for the service.
+/// This endpoint displays a table with data from the view_easy_good_vibes_degree_two view.
+/// It shows sensor, emitter, and two-degree-vibe-count columns.
 ///
 /// # Returns
 ///
-/// A static string "A new reputest is in the house!".
-pub async fn handle_root() -> &'static str {
-    "A new reputest is in the house!"
+/// An HTML page with a table displaying the view data.
+pub async fn handle_root(State(pool): State<PgPool>) -> Result<Html<String>, (StatusCode, String)> {
+    match get_easy_good_vibes_degree_two(&pool).await {
+        Ok(rows) => {
+            let mut html = String::from(
+                r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reputest - Good Vibes Degree Two</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-top: 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+            color: #555;
+        }
+        tr:hover {
+            background-color: #f8f9fa;
+        }
+        .count {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Good Vibes Degree Two</h1>
+        <table>
+            <thead>
+                <tr>
+                    <th>sensor</th>
+                    <th>emitter</th>
+                    <th class="count">two-degree-vibe-count</th>
+                </tr>
+            </thead>
+            <tbody>
+"#,
+            );
+
+            for row in rows {
+                html.push_str(&format!(
+                    "                <tr>\n                    <td>{}</td>\n                    <td>{}</td>\n                    <td class=\"count\">{}</td>\n                </tr>\n",
+                    html_escape(&row.sensor_username),
+                    html_escape(&row.emitter_username),
+                    row.degree_two_path_count
+                ));
+            }
+
+            html.push_str(
+                r#"            </tbody>
+        </table>
+    </div>
+</body>
+</html>"#,
+            );
+
+            Ok(Html(html))
+        }
+        Err(e) => {
+            error!("Failed to query view_easy_good_vibes_degree_two: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to load data: {}", e),
+            ))
+        }
+    }
+}
+
+/// Escapes HTML special characters to prevent XSS attacks.
+fn html_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#x27;")
 }

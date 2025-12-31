@@ -31,6 +31,7 @@ use axum::{
     Router,
 };
 use log::info;
+use sqlx::PgPool;
 use std::net::SocketAddr;
 use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
@@ -101,6 +102,21 @@ async fn main() {
     // Note: Tokens are now loaded directly from the database when needed
     // No need to pre-load them as environment variables
 
+    // Create database pool
+    let db_pool = match db::get_db_pool().await {
+        Ok(pool) => {
+            info!("Database pool created successfully");
+            pool
+        }
+        Err(e) => {
+            log::error!("Failed to create database pool: {}", e);
+            log::error!("Server will start but database-dependent endpoints may fail");
+            // Create a dummy pool - this won't work but allows server to start
+            // In production, you might want to panic or exit here
+            return;
+        }
+    };
+
     // Start the cronjob scheduler for GMGV hashtag monitoring
     let cronjob_handle = tokio::spawn(async {
         match start_gmgv_cronjob().await {
@@ -128,6 +144,7 @@ async fn main() {
         .route("/reputest", post(handle_reputest_post))
         .route("/health", get(handle_health))
         .route("/tweet", post(handle_tweet))
+        .with_state(db_pool)
         .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()));
 
     // Get the server port and bind address

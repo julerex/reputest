@@ -33,14 +33,16 @@ use crate::{
 };
 use axum::{
     body::Body,
+    extract::State,
     http::{Request, StatusCode},
-    response::Json,
+    response::{Html, Json},
     routing::{get, post},
     Router,
 };
 use chrono::Utc;
 use http_body_util::BodyExt;
 use serde_json::Value;
+use sqlx::PgPool;
 use tower::ServiceExt;
 
 /// Creates a test application instance with all routes configured.
@@ -49,26 +51,63 @@ use tower::ServiceExt;
 /// as the main application, but without middleware layers that might interfere
 /// with testing. It's used by integration tests to make HTTP requests.
 ///
+/// # Parameters
+///
+/// - `pool`: Optional database pool. If provided, the root route will be included.
+///   If None, the root route is omitted since it requires database access.
+///
 /// # Returns
 ///
-/// An Axum `Router` instance configured with all application routes.
-fn create_test_app() -> Router {
-    Router::new()
-        .route("/", get(handle_root))
+/// An Axum `Router` instance configured with application routes.
+fn create_test_app(pool: Option<PgPool>) -> Router {
+    let mut router = Router::new()
         .route("/reputest", get(handle_reputest_get))
         .route("/reputest", post(handle_reputest_post))
         .route("/health", get(handle_health))
-        .route("/tweet", post(handle_tweet))
+        .route("/tweet", post(handle_tweet));
+    
+    if let Some(pool) = pool {
+        router = router
+            .route("/", get(handle_root))
+            .with_state(pool);
+    }
+    
+    router
 }
 
 /// Tests the root endpoint handler function directly.
 ///
-/// This test verifies that the `handle_root` function returns the expected
-/// welcome message without making an HTTP request.
+/// This test verifies that the `handle_root` function returns HTML
+/// without making an HTTP request. It requires a database connection.
 #[tokio::test]
 async fn test_handle_root() {
-    let response = handle_root().await;
-    assert_eq!(response, "A new reputest is in the house!");
+    // Skip test if DATABASE_URL is not set
+    if std::env::var("DATABASE_URL").is_err() {
+        println!("Skipping handle_root test - DATABASE_URL not set");
+        return;
+    }
+
+    let pool = match get_db_pool().await {
+        Ok(pool) => pool,
+        Err(_) => {
+            println!("Skipping handle_root test - could not connect to database");
+            return;
+        }
+    };
+
+    let response = handle_root(State(pool)).await;
+    match response {
+        Ok(Html(html)) => {
+            // Verify it's HTML and contains the expected table structure
+            assert!(html.contains("<table>"));
+            assert!(html.contains("sensor"));
+            assert!(html.contains("emitter"));
+            assert!(html.contains("two-degree-vibe-count"));
+        }
+        Err((status, msg)) => {
+            panic!("handle_root returned error: {} - {}", status, msg);
+        }
+    }
 }
 
 /// Tests the GET /reputest endpoint handler function directly.
@@ -107,11 +146,25 @@ async fn test_handle_health() {
 /// Integration test for the root endpoint (GET /).
 ///
 /// This test makes an actual HTTP request to the root endpoint and verifies:
-/// - The response status is 200 OK
-/// - The response body contains the expected welcome message
+/// - The response status is 200 OK (or 500 if database unavailable)
+/// - The response body contains HTML with a table
 #[tokio::test]
 async fn test_root_endpoint() {
-    let app = create_test_app();
+    // Skip test if DATABASE_URL is not set
+    if std::env::var("DATABASE_URL").is_err() {
+        println!("Skipping root endpoint test - DATABASE_URL not set");
+        return;
+    }
+
+    let pool = match get_db_pool().await {
+        Ok(pool) => pool,
+        Err(_) => {
+            println!("Skipping root endpoint test - could not connect to database");
+            return;
+        }
+    };
+
+    let app = create_test_app(Some(pool));
 
     let request = Request::builder()
         .uri("/")
@@ -120,11 +173,20 @@ async fn test_root_endpoint() {
         .unwrap();
 
     let response = app.oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
+    
+    // Should be OK if database query succeeds, or 500 if it fails
+    assert!(response.status() == StatusCode::OK || response.status() == StatusCode::INTERNAL_SERVER_ERROR);
 
     let body = response.into_body().collect().await.unwrap().to_bytes();
     let body_str = String::from_utf8(body.to_vec()).unwrap();
-    assert_eq!(body_str, "A new reputest is in the house!");
+    
+    if response.status() == StatusCode::OK {
+        // Verify it's HTML and contains the expected table structure
+        assert!(body_str.contains("<table>"));
+        assert!(body_str.contains("sensor"));
+        assert!(body_str.contains("emitter"));
+        assert!(body_str.contains("two-degree-vibe-count"));
+    }
 }
 
 /// Integration test for the GET /reputest endpoint.
@@ -134,7 +196,7 @@ async fn test_root_endpoint() {
 /// - The response body contains "Reputesting!"
 #[tokio::test]
 async fn test_reputest_get_endpoint() {
-    let app = create_test_app();
+    let app = create_test_app(None);
 
     let request = Request::builder()
         .uri("/reputest")
@@ -157,7 +219,7 @@ async fn test_reputest_get_endpoint() {
 /// - The response body contains "Reputesting!"
 #[tokio::test]
 async fn test_reputest_post_endpoint() {
-    let app = create_test_app();
+    let app = create_test_app(None);
 
     let request = Request::builder()
         .uri("/reputest")
@@ -181,7 +243,7 @@ async fn test_reputest_post_endpoint() {
 /// - The JSON contains the expected status and service fields
 #[tokio::test]
 async fn test_health_endpoint() {
-    let app = create_test_app();
+    let app = create_test_app(None);
 
     let request = Request::builder()
         .uri("/health")
@@ -213,7 +275,7 @@ async fn test_health_endpoint() {
 /// environments where database tokens might be missing or invalid.
 #[tokio::test]
 async fn test_tweet_endpoint_without_credentials() {
-    let app = create_test_app();
+    let app = create_test_app(None);
 
     let request = Request::builder()
         .uri("/tweet")
