@@ -18,8 +18,8 @@ This guide will help you set up OAuth 2.0 User Context authentication for your T
 4. Enable OAuth 2.0
 5. Set the following:
    - **App Type**: Single Page App (for PKCE) / "Web App, Automated App or Bot"
-   - **Callback URI / Redirect URL**: `https://reputest-small-violet-3860.fly.dev/callback`
-   - **Website URL**: `https://reputest-small-violet-3860.fly.dev`
+   - **Callback URI / Redirect URL**: `https://reputest.fly.dev/callback`
+   - **Website URL**: `https://reputest.fly.dev`
 
 6. Save your settings and note down:
    - **Client ID**

@@ -98,6 +98,7 @@ bot-post-tweet: ## Post a tweet using interactive script
 
 
 # Database targets ############################################################
+# NOTE: Database connection string (q49ypo4wvmzr17ln) may need to be updated if app name changes
 
 .PHONY: fly-db-connect
 fly-db-connect: ## Connect to database
