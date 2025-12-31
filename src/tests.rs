@@ -60,19 +60,18 @@ use tower::ServiceExt;
 ///
 /// An Axum `Router` instance configured with application routes.
 fn create_test_app(pool: Option<PgPool>) -> Router {
-    let mut router = Router::new()
+    let base_router = Router::new()
         .route("/reputest", get(handle_reputest_get))
         .route("/reputest", post(handle_reputest_post))
         .route("/health", get(handle_health))
         .route("/tweet", post(handle_tweet));
-    
+
     if let Some(pool) = pool {
-        router = router
-            .route("/", get(handle_root))
-            .with_state(pool);
+        let stateful_router = Router::new().route("/", get(handle_root)).with_state(pool);
+        base_router.merge(stateful_router)
+    } else {
+        base_router
     }
-    
-    router
 }
 
 /// Tests the root endpoint handler function directly.
@@ -173,14 +172,15 @@ async fn test_root_endpoint() {
         .unwrap();
 
     let response = app.oneshot(request).await.unwrap();
-    
+    let status = response.status();
+
     // Should be OK if database query succeeds, or 500 if it fails
-    assert!(response.status() == StatusCode::OK || response.status() == StatusCode::INTERNAL_SERVER_ERROR);
+    assert!(status == StatusCode::OK || status == StatusCode::INTERNAL_SERVER_ERROR);
 
     let body = response.into_body().collect().await.unwrap().to_bytes();
     let body_str = String::from_utf8(body.to_vec()).unwrap();
-    
-    if response.status() == StatusCode::OK {
+
+    if status == StatusCode::OK {
         // Verify it's HTML and contains the expected table structure
         assert!(body_str.contains("<table>"));
         assert!(body_str.contains("sensor"));

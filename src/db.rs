@@ -1016,6 +1016,9 @@ pub async fn get_easy_good_vibes_degree_two(
         });
     }
 
-    info!("Found {} rows in view_easy_good_vibes_degree_two", results.len());
+    info!(
+        "Found {} rows in view_easy_good_vibes_degree_two",
+        results.len()
+    );
     Ok(results)
 }

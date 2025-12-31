@@ -31,7 +31,6 @@ use axum::{
     Router,
 };
 use log::info;
-use sqlx::PgPool;
 use std::net::SocketAddr;
 use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
