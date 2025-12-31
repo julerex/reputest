@@ -82,6 +82,15 @@ fly-status: ## Show Fly app status
 fly-machines-list: ## Show Fly machines list
 	fly machines list
 
+.PHONY: fly-certs-list
+fly-certs-list: ## Show Fly certs list
+	fly certs list
+
+.PHONY: fly-ips-list
+fly-ips-list: ## Show Fly IPs list
+	fly ips list
+
+
 # Bot targets ############################################################
 
 .PHONY: bot-auth

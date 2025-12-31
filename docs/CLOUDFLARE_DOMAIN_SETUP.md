@@ -13,14 +13,14 @@ This guide explains how to connect your CloudFlare domain to your Fly.io applica
 First, add your domain to your Fly.io application:
 
 ```bash
-fly domains add `yourdomain.com`
+fly certs add yourdomain.com
 ```
 
 Replace `yourdomain.com` with your actual domain name. You can also add a subdomain:
 
 ```bash
-fly domains add `www.yourdomain.com`
-fly domains add `api.yourdomain.com`
+fly certs add www.yourdomain.com
+fly certs add api.yourdomain.com
 ```
 
 ## Step 2: Verify Domain Addition
@@ -28,63 +28,94 @@ fly domains add `api.yourdomain.com`
 Check that your domain was added successfully:
 
 ```bash
-fly domains list
+fly certs list
 ```
 
 You should see your domain(s) listed with a status indicating they're being configured.
 
-## Step 3: Update CloudFlare DNS Records
+## Step 3: Configure DNS Records Manually
 
-Fly.io will provide you with the DNS records you need to add to CloudFlare. Run this command to see the required DNS configuration:
+**Important:** Fly.io's automatic CloudFlare integration only works for **subdomains** (like `www.yourdomain.com`), not for **apex domains** (like `yourdomain.com`). You need to manually configure DNS records in CloudFlare for apex domains.
 
-```bash
-fly domains show `yourdomain.com`
-```
-
-This will display the CNAME or A records you need to add to CloudFlare.
-
-### DNS Record Configuration
+### For Apex Domain (`yourdomain.com`)
 
 In your CloudFlare dashboard:
 
-1. Go to your domain's DNS settings
-2. Add the DNS records provided by Fly.io:
-
-   **For apex domain (`yourdomain.com`):**
-   - Type: `A` or `AAAA`
-   - Name: `@` (or leave blank)
-   - Content: The IP address provided by Fly.io
-   - Proxy status: **DNS only** (grey cloud icon)
-
-   **For subdomains (`www.yourdomain.com`):**
-   - Type: `CNAME`
-   - Name: `www`
-   - Content: The target provided by Fly.io
-   - Proxy status: **DNS only** (grey cloud icon)
-
-**Important:** Set the proxy status to **DNS only** (grey cloud icon) for all Fly.io DNS records. Fly.io handles SSL termination, so CloudFlare's proxy should be disabled for these records.
-
-## Step 4: Wait for DNS Propagation
-
-DNS changes can take up to 24-48 hours to propagate globally, but often work within a few minutes. You can check the status:
+1. Go to **DNS** → **Records**
+2. Add an **A record**:
+   - **Type**: `A`
+   - **Name**: `@` (leave blank for apex domain)
+   - **Content**: The IP address from `fly ips list` (run this command to get your app's IP)
+   - **Proxy status**: **DNS only** (grey cloud icon)
 
 ```bash
-fly domains list
+# Get your Fly.io app's IP address
+fly ips list
 ```
 
-## Step 5: Verify SSL Certificate
+This will show your app's IPv4 and IPv6 addresses. Use the IPv4 address for the A record.
 
-Fly.io automatically provisions SSL certificates for your custom domains. Once DNS is configured, SSL should work automatically.
+### For Subdomains
 
-Test your domain:
+Subdomains work automatically with `fly certs add` - no manual DNS configuration needed.
+
+### Verify Configuration
+
+After setting up DNS records, verify everything is working:
 
 ```bash
-curl -I `https://yourdomain.com`
+fly certs check yourdomain.com
+```
+
+When successful, you'll see:
+
+- Status: Ready
+- DNS Provider: cloudflare
+- Certificate Authority: Let's Encrypt
+- A confirmation that "Your DNS is correctly configured"
+
+## Step 4: Wait for DNS Propagation and SSL Setup
+
+DNS changes and SSL certificate provisioning can take up to 24-48 hours to propagate globally, but often work within a few minutes. You can check the status:
+
+```bash
+fly certs list
+fly certs check yourdomain.com
+```
+
+Fly.io automatically provisions SSL certificates for your custom domains. Once DNS is configured, SSL should work automatically. Test your domain:
+
+```bash
+curl -I https://yourdomain.com
 ```
 
 You should see a `200 OK` response with proper SSL headers.
 
-## Step 6: Update Fly.io Configuration (Optional)
+## Troubleshooting
+
+### Apex Domain Not Working
+
+**Problem**: `yourdomain.com` doesn't work, but `www.yourdomain.com` does.
+
+**Solution**: Fly.io's automatic CloudFlare integration only works for subdomains. For apex domains, you must manually add DNS records in CloudFlare pointing to your Fly.io app's IP address.
+
+### DNS Not Propagating
+
+**Problem**: Certificate shows "Ready" but domain doesn't work.
+
+**Solution**:
+
+1. Wait 24-48 hours for DNS propagation
+2. Verify DNS records with `dig yourdomain.com`
+3. Check CloudFlare proxy status is set to "DNS only"
+
+### Certificate Issues
+
+**Problem**: SSL certificate errors.
+
+**Solution**: Run `fly certs check yourdomain.com` and ensure DNS is properly configured.
+
+## Step 5: Update Fly.io Configuration (Optional)
 
 If you want to configure additional domain-specific settings, you can update your `fly.toml`:
 
@@ -113,9 +144,9 @@ Then redeploy:
 make fly-deploy
 ```
 
-## Troubleshooting
+### Additional Issues
 
-### DNS Not Resolving
+#### DNS Not Resolving
 
 - Check CloudFlare DNS records are correct
 - Ensure proxy status is set to "DNS only" (grey cloud)
@@ -125,7 +156,7 @@ make fly-deploy
 ### SSL Certificate Issues
 
 - Fly.io handles SSL automatically - no manual certificate upload needed
-- Ensure your domain is verified in Fly.io (`fly domains list`)
+- Ensure your domain is verified in Fly.io (`fly certs list`)
 - Check that DNS is pointing correctly to Fly.io
 
 ### Mixed Content Warnings
