@@ -976,7 +976,9 @@ pub async fn get_vibe_score(
 #[derive(Debug)]
 pub struct AllGoodVibesDegrees {
     pub sensor_username: String,
+    pub sensor_name: String,
     pub emitter_username: String,
+    pub emitter_name: String,
     pub degree_one_path_count: i64,
     pub degree_two_path_count: i64,
     pub degree_three_path_count: i64,
@@ -1003,8 +1005,8 @@ pub async fn get_all_good_vibes_degrees(
 
     let rows = sqlx::query(
         r#"
-        SELECT sensor_username, emitter_username, degree_one_path_count, 
-               degree_two_path_count, degree_three_path_count, degree_four_path_count
+        SELECT sensor_username, sensor_name, emitter_username, emitter_name,
+               degree_one_path_count, degree_two_path_count, degree_three_path_count, degree_four_path_count
         FROM view_all_good_vibes_degrees
         "#,
     )
@@ -1015,7 +1017,9 @@ pub async fn get_all_good_vibes_degrees(
     for row in rows {
         results.push(AllGoodVibesDegrees {
             sensor_username: row.get("sensor_username"),
+            sensor_name: row.get("sensor_name"),
             emitter_username: row.get("emitter_username"),
+            emitter_name: row.get("emitter_name"),
             degree_one_path_count: row.get("degree_one_path_count"),
             degree_two_path_count: row.get("degree_two_path_count"),
             degree_three_path_count: row.get("degree_three_path_count"),

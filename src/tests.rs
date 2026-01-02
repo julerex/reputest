@@ -100,7 +100,9 @@ async fn test_handle_root() {
             // Verify it's HTML and contains the expected table structure
             assert!(html.contains("<table>"));
             assert!(html.contains("sensor"));
+            assert!(html.contains("sensor name"));
             assert!(html.contains("emitter"));
+            assert!(html.contains("emitter name"));
             assert!(html.contains("one-degree-vibe-count"));
             assert!(html.contains("two-degree-vibe-count"));
             assert!(html.contains("three-degree-vibe-count"));

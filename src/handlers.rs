@@ -144,7 +144,7 @@ pub async fn handle_root(State(pool): State<PgPool>) -> Result<Html<String>, (St
             background-color: #f5f5f5;
         }
         .container {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
             background-color: white;
             padding: 30px;
@@ -186,7 +186,9 @@ pub async fn handle_root(State(pool): State<PgPool>) -> Result<Html<String>, (St
             <thead>
                 <tr>
                     <th>sensor</th>
+                    <th>sensor name</th>
                     <th>emitter</th>
+                    <th>emitter name</th>
                     <th class="count">one-degree-vibe-count</th>
                     <th class="count">two-degree-vibe-count</th>
                     <th class="count">three-degree-vibe-count</th>
@@ -199,9 +201,11 @@ pub async fn handle_root(State(pool): State<PgPool>) -> Result<Html<String>, (St
 
             for row in rows {
                 html.push_str(&format!(
-                    "                <tr>\n                    <td>{}</td>\n                    <td>{}</td>\n                    <td class=\"count\">{}</td>\n                    <td class=\"count\">{}</td>\n                    <td class=\"count\">{}</td>\n                    <td class=\"count\">{}</td>\n                </tr>\n",
+                    "                <tr>\n                    <td>{}</td>\n                    <td>{}</td>\n                    <td>{}</td>\n                    <td>{}</td>\n                    <td class=\"count\">{}</td>\n                    <td class=\"count\">{}</td>\n                    <td class=\"count\">{}</td>\n                    <td class=\"count\">{}</td>\n                </tr>\n",
                     html_escape(&row.sensor_username),
+                    html_escape(&row.sensor_name),
                     html_escape(&row.emitter_username),
+                    html_escape(&row.emitter_name),
                     row.degree_one_path_count,
                     row.degree_two_path_count,
                     row.degree_three_path_count,
