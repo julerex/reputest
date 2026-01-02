@@ -51,8 +51,8 @@ export xapi_access_token="your_access_token_here"
 
 # Optional: For automatic token refresh (recommended)
 export xapi_refresh_token="your_refresh_token_here"
-export xapi_client_id="your_client_id_here"
-export xapi_client_secret="your_client_secret_here"
+export XAPI_CLIENT_ID="your_client_id_here"
+export XAPI_CLIENT_SECRET="your_client_secret_here"
 ```
 
 **Note**: If you set the refresh token and client credentials, your bot will automatically refresh expired access tokens without manual intervention.
@@ -69,7 +69,7 @@ curl -X POST http://localhost:3000/tweet
 OAuth 2.0 User Context tokens expire. Your bot now handles this automatically:
 
 ### Automatic Token Refresh (Default Behavior)
-If you've set the required environment variables (`xapi_refresh_token`, `xapi_client_id`, `xapi_client_secret`), your bot will:
+If you've set the required environment variables (`xapi_refresh_token`, `XAPI_CLIENT_ID`, `XAPI_CLIENT_SECRET`), your bot will:
 
 1. **Detect 401 errors** automatically when making API calls
 2. **Refresh the access token** using the stored refresh token

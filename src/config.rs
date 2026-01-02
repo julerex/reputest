@@ -67,8 +67,8 @@ impl TwitterConfig {
     ///
     /// # Optional Environment Variables (for automatic token refresh)
     ///
-    /// - `xapi_client_id`: Client ID for OAuth 2.0 operations
-    /// - `xapi_client_secret`: Client Secret for OAuth 2.0 operations
+    /// - `XAPI_CLIENT_ID`: Client ID for OAuth 2.0 operations
+    /// - `XAPI_CLIENT_SECRET`: Client Secret for OAuth 2.0 operations
     ///
     /// # Token Loading
     ///
@@ -90,8 +90,8 @@ impl TwitterConfig {
     /// async fn main() {
     ///     let pool = db::get_db_pool().await.unwrap();
     ///     // Optionally set environment variables
-    ///     std::env::set_var("xapi_client_id", "your_client_id");
-    ///     std::env::set_var("xapi_client_secret", "your_client_secret");
+    ///     std::env::set_var("XAPI_CLIENT_ID", "your_client_id");
+    ///     std::env::set_var("XAPI_CLIENT_SECRET", "your_client_secret");
     ///
     ///     let config = TwitterConfig::from_env(&pool).await.unwrap();
     /// }
@@ -172,9 +172,9 @@ impl TwitterConfig {
         };
 
         // Load optional client credentials
-        let client_id = match env::var("xapi_client_id") {
+        let client_id = match env::var("XAPI_CLIENT_ID") {
             Ok(id) => {
-                debug!("Found xapi_client_id environment variable");
+                debug!("Found XAPI_CLIENT_ID environment variable");
                 debug!(
                     "Client ID (masked): {}...",
                     &id[..std::cmp::min(id.len(), 8)]
@@ -182,14 +182,14 @@ impl TwitterConfig {
                 Some(id)
             }
             Err(_) => {
-                warn!("No xapi_client_id found in environment variables");
+                warn!("No XAPI_CLIENT_ID found in environment variables");
                 None
             }
         };
 
-        let client_secret = match env::var("xapi_client_secret") {
+        let client_secret = match env::var("XAPI_CLIENT_SECRET") {
             Ok(secret) => {
-                debug!("Found xapi_client_secret environment variable");
+                debug!("Found XAPI_CLIENT_SECRET environment variable");
                 debug!(
                     "Client secret (masked): {}...",
                     &secret[..std::cmp::min(secret.len(), 8)]
@@ -197,7 +197,7 @@ impl TwitterConfig {
                 Some(secret)
             }
             Err(_) => {
-                warn!("No xapi_client_secret found in environment variables");
+                warn!("No XAPI_CLIENT_SECRET found in environment variables");
                 None
             }
         };
@@ -272,10 +272,10 @@ impl TwitterConfig {
             _ => {
                 error!("Cannot refresh token: missing required credentials");
                 if self.client_id.is_none() {
-                    error!("Missing xapi_client_id");
+                    error!("Missing XAPI_CLIENT_ID");
                 }
                 if self.client_secret.is_none() {
-                    error!("Missing xapi_client_secret");
+                    error!("Missing XAPI_CLIENT_SECRET");
                 }
                 if self.refresh_token.is_none() {
                     error!("Missing refresh token (should be loaded from database)");
