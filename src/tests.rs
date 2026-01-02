@@ -101,7 +101,10 @@ async fn test_handle_root() {
             assert!(html.contains("<table>"));
             assert!(html.contains("sensor"));
             assert!(html.contains("emitter"));
+            assert!(html.contains("one-degree-vibe-count"));
             assert!(html.contains("two-degree-vibe-count"));
+            assert!(html.contains("three-degree-vibe-count"));
+            assert!(html.contains("four-degree-vibe-count"));
         }
         Err((status, msg)) => {
             panic!("handle_root returned error: {} - {}", status, msg);

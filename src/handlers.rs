@@ -12,7 +12,7 @@ use log::{error, info};
 use serde_json::{json, Value};
 use sqlx::PgPool;
 
-use crate::db::get_easy_good_vibes_degree_two;
+use crate::db::get_all_good_vibes_degrees;
 use crate::twitter::post_tweet;
 
 /// Handles GET requests to the `/reputest` endpoint.
@@ -120,14 +120,14 @@ pub async fn handle_tweet() -> Result<Json<Value>, (StatusCode, Json<Value>)> {
 
 /// Handles GET requests to the root `/` endpoint.
 ///
-/// This endpoint displays a table with data from the view_easy_good_vibes_degree_two view.
-/// It shows sensor, emitter, and two-degree-vibe-count columns.
+/// This endpoint displays a table with data from the view_all_good_vibes_degrees view.
+/// It shows sensor, emitter, and all four degree path counts.
 ///
 /// # Returns
 ///
 /// An HTML page with a table displaying the view data.
 pub async fn handle_root(State(pool): State<PgPool>) -> Result<Html<String>, (StatusCode, String)> {
-    match get_easy_good_vibes_degree_two(&pool).await {
+    match get_all_good_vibes_degrees(&pool).await {
         Ok(rows) => {
             let mut html = String::from(
                 r#"<!DOCTYPE html>
@@ -135,7 +135,7 @@ pub async fn handle_root(State(pool): State<PgPool>) -> Result<Html<String>, (St
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reputest - Good Vibes Degree Two</title>
+    <title>Reputest - Good Vibes</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
@@ -144,7 +144,7 @@ pub async fn handle_root(State(pool): State<PgPool>) -> Result<Html<String>, (St
             background-color: #f5f5f5;
         }
         .container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
             background-color: white;
             padding: 30px;
@@ -181,13 +181,16 @@ pub async fn handle_root(State(pool): State<PgPool>) -> Result<Html<String>, (St
 </head>
 <body>
     <div class="container">
-        <h1>Good Vibes Degree Two</h1>
+        <h1>Good Vibes</h1>
         <table>
             <thead>
                 <tr>
                     <th>sensor</th>
                     <th>emitter</th>
+                    <th class="count">one-degree-vibe-count</th>
                     <th class="count">two-degree-vibe-count</th>
+                    <th class="count">three-degree-vibe-count</th>
+                    <th class="count">four-degree-vibe-count</th>
                 </tr>
             </thead>
             <tbody>
@@ -196,10 +199,13 @@ pub async fn handle_root(State(pool): State<PgPool>) -> Result<Html<String>, (St
 
             for row in rows {
                 html.push_str(&format!(
-                    "                <tr>\n                    <td>{}</td>\n                    <td>{}</td>\n                    <td class=\"count\">{}</td>\n                </tr>\n",
+                    "                <tr>\n                    <td>{}</td>\n                    <td>{}</td>\n                    <td class=\"count\">{}</td>\n                    <td class=\"count\">{}</td>\n                    <td class=\"count\">{}</td>\n                    <td class=\"count\">{}</td>\n                </tr>\n",
                     html_escape(&row.sensor_username),
                     html_escape(&row.emitter_username),
-                    row.degree_two_path_count
+                    row.degree_one_path_count,
+                    row.degree_two_path_count,
+                    row.degree_three_path_count,
+                    row.degree_four_path_count
                 ));
             }
 
@@ -214,7 +220,7 @@ pub async fn handle_root(State(pool): State<PgPool>) -> Result<Html<String>, (St
             Ok(Html(html))
         }
         Err(e) => {
-            error!("Failed to query view_easy_good_vibes_degree_two: {}", e);
+            error!("Failed to query view_all_good_vibes_degrees: {}", e);
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("Failed to load data: {}", e),

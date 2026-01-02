@@ -972,18 +972,21 @@ pub async fn get_vibe_score(
     get_vibe_score_two(pool, sensor_user_id, emitter_user_id).await
 }
 
-/// Represents a row from the view_easy_good_vibes_degree_two view.
+/// Represents a row from the view_all_good_vibes_degrees view.
 #[derive(Debug)]
-pub struct EasyGoodVibesDegreeTwo {
+pub struct AllGoodVibesDegrees {
     pub sensor_username: String,
     pub emitter_username: String,
+    pub degree_one_path_count: i64,
     pub degree_two_path_count: i64,
+    pub degree_three_path_count: i64,
+    pub degree_four_path_count: i64,
 }
 
-/// Retrieves all rows from the view_easy_good_vibes_degree_two view.
+/// Retrieves all rows from the view_all_good_vibes_degrees view.
 ///
 /// This function queries the view and returns all rows with sensor username,
-/// emitter username, and the degree two path count.
+/// emitter username, and all four degree path counts.
 ///
 /// # Parameters
 ///
@@ -991,17 +994,18 @@ pub struct EasyGoodVibesDegreeTwo {
 ///
 /// # Returns
 ///
-/// - `Ok(Vec<EasyGoodVibesDegreeTwo>)`: Vector of all rows from the view
+/// - `Ok(Vec<AllGoodVibesDegrees>)`: Vector of all rows from the view
 /// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the query fails
-pub async fn get_easy_good_vibes_degree_two(
+pub async fn get_all_good_vibes_degrees(
     pool: &PgPool,
-) -> Result<Vec<EasyGoodVibesDegreeTwo>, Box<dyn std::error::Error + Send + Sync>> {
-    info!("Querying view_easy_good_vibes_degree_two");
+) -> Result<Vec<AllGoodVibesDegrees>, Box<dyn std::error::Error + Send + Sync>> {
+    info!("Querying view_all_good_vibes_degrees");
 
     let rows = sqlx::query(
         r#"
-        SELECT sensor_username, emitter_username, degree_two_path_count
-        FROM view_easy_good_vibes_degree_two
+        SELECT sensor_username, emitter_username, degree_one_path_count, 
+               degree_two_path_count, degree_three_path_count, degree_four_path_count
+        FROM view_all_good_vibes_degrees
         "#,
     )
     .fetch_all(pool)
@@ -1009,15 +1013,18 @@ pub async fn get_easy_good_vibes_degree_two(
 
     let mut results = Vec::new();
     for row in rows {
-        results.push(EasyGoodVibesDegreeTwo {
+        results.push(AllGoodVibesDegrees {
             sensor_username: row.get("sensor_username"),
             emitter_username: row.get("emitter_username"),
+            degree_one_path_count: row.get("degree_one_path_count"),
             degree_two_path_count: row.get("degree_two_path_count"),
+            degree_three_path_count: row.get("degree_three_path_count"),
+            degree_four_path_count: row.get("degree_four_path_count"),
         });
     }
 
     info!(
-        "Found {} rows in view_easy_good_vibes_degree_two",
+        "Found {} rows in view_all_good_vibes_degrees",
         results.len()
     );
     Ok(results)
