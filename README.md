@@ -1,319 +1,348 @@
-# Reputest - Rust Web Service with Twitter/X API Integration
+<p align="center">
+  <img src="https://img.shields.io/badge/rust-1.70%2B-orange.svg?style=for-the-badge&logo=rust" alt="Rust">
+  <img src="https://img.shields.io/badge/PostgreSQL-316192?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL">
+  <img src="https://img.shields.io/badge/Twitter-1DA1F2?style=for-the-badge&logo=twitter&logoColor=white" alt="Twitter">
+  <img src="https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge" alt="MIT License">
+</p>
 
-[![Rust CI](https://github.com/julerex/reputest/actions/workflows/rust-ci.yml/badge.svg)](https://github.com/julerex/reputest/actions/workflows/rust-ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Rust](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org/)
+<h1 align="center">✨ Reputest</h1>
 
-A modern Rust web service built with Axum that provides HTTP endpoints for testing and demonstration purposes, featuring Twitter/X API integration using OAuth 2.0 User Context authentication for posting tweets and automated hashtag monitoring via cronjobs.
+<p align="center">
+  <strong>A social reputation graph built on good vibes</strong><br>
+  Track positive relationships on Twitter/X and discover connection degrees between users
+</p>
 
-## Features
+<p align="center">
+  <a href="#-what-it-does">What It Does</a> •
+  <a href="#-how-it-works">How It Works</a> •
+  <a href="#-quick-start">Quick Start</a> •
+  <a href="#-api-reference">API</a> •
+  <a href="#-deployment">Deployment</a>
+</p>
 
-- 🦀 **Rust-based web service** with Axum framework for high performance
-- 🐦 **Twitter/X API integration** with OAuth 2.0 User Context authentication for posting tweets
-- 📅 **Automated cronjob scheduling** for hashtag monitoring (GMGV hashtag every 10 minutes)
-- 🌐 **Multiple HTTP endpoints** for testing and health monitoring
-- 📝 **Structured logging** with configurable log levels
-- 🐳 **Docker containerization** with multi-stage builds for optimized images
-- ☁️ **Multi-platform deployment** support (Fly.io)
-- 🔧 **Comprehensive test suite** with async testing utilities
-- 🚀 **Production-ready** with optimized release builds
+---
 
-## Prerequisites
+## 🎯 What It Does
 
-- [Rust](https://rustup.rs/) (latest stable version)
-- [Docker](https://docs.docker.com/get-docker/) (for containerization)
-- Twitter/X API credentials (for Twitter functionality)
-- [Fly CLI](https://fly.io/docs/hands-on/install-flyctl/) (for Fly.io deployment)
+Reputest monitors Twitter/X for **#gmgv** (Give Me Good Vibes) hashtag tweets and builds a directed social graph of positive relationships. When someone tweets `#gmgv @username`, they're sending good vibes to that user, creating a connection in the reputation graph.
 
-## Environment Variables
+**Key Features:**
 
-The following environment variables are required for full functionality:
+- 🔍 **Hashtag Monitoring** — Automatically scans for #gmgv tweets every 5 minutes
+- 📊 **Multi-Degree Analysis** — Calculates 1st through 4th degree connection paths
+- 🤖 **Twitter Bot** — Users can query vibe scores by mentioning @reputest
+- 🔐 **Encrypted Token Storage** — AES-256-GCM encryption for all OAuth tokens
+- ⚡ **High Performance** — Built with Axum and async Rust for speed
+- 🛡️ **Production Security** — Rate limiting, security headers, and XSS protection
 
-### Required for Twitter/X API Integration
+## 🧠 How It Works
 
-- `xapi_access_token`: Twitter API Access token (OAuth 2.0 User Context for all operations)
+### The Good Vibes Graph
 
-### Optional Configuration
-
-- `PORT`: Server port (defaults to 3000)
-- `RUST_LOG`: Log level (defaults to info)
-
-## 🤖 Twitter Bot Setup
-
-This service can be used as a Twitter bot. To set up OAuth 2.0 User Context authentication for posting tweets:
-
-### Quick Setup
-
-1. **Configure your Twitter App** in the [Twitter Developer Portal](https://developer.twitter.com/):
-   - Enable OAuth 2.0
-   - Set App Type to "Single Page App"
-   - Add redirect URI: `http://localhost:8080/callback`
-   - Select scopes: `tweet.read`, `tweet.write`, `users.read`, `offline.access`
-
-2. **Get your access token** using the built-in authorization script:
-   ```bash
-   cargo run --bin authorize_bot
-   ```
-
-3. **Set your environment variables**:
-   ```bash
-   export xapi_access_token="your_access_token"
-   ```
-
-4. **Test your bot**:
-   ```bash
-   curl -X POST http://localhost:3000/tweet
-   ```
-
-### Token Management
-
-- **Automatic token refresh**: Set `xapi_refresh_token`, `XAPI_CLIENT_ID`, and `XAPI_CLIENT_SECRET` environment variables
-- **Manual token refresh**: `cargo run --bin refresh_token`
-- **Detailed setup guide**: See [docs/BOT_SETUP.md](docs/BOT_SETUP.md)
-
-**New Feature**: The bot now automatically detects expired tokens (401 errors) and refreshes them using the stored refresh token, eliminating the need for manual intervention in most cases.
-
-### Environment Variables
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `xapi_access_token` | ✅ Yes | OAuth 2.0 User Context access token for Twitter API |
-| `xapi_refresh_token` | ⚠️ Optional | Refresh token for automatic token renewal |
-| `XAPI_CLIENT_ID` | ⚠️ Optional | OAuth 2.0 client ID (required for automatic refresh) |
-| `XAPI_CLIENT_SECRET` | ⚠️ Optional | OAuth 2.0 client secret (required for automatic refresh) |
-| `PORT` | ❌ No | Server port (defaults to 3000) |
-
-**Note**: For automatic token refresh, you need all three optional variables (`xapi_refresh_token`, `XAPI_CLIENT_ID`, `XAPI_CLIENT_SECRET`).
-
-## API Endpoints
-
-| Method | Endpoint    | Description             | Response                                       |
-|--------|-------------|-------------------------|------------------------------------------------|
-| `GET`  | `/`         | Welcome message         | `"A new reputest is in the house!"`            |
-| `GET`  | `/reputest` | Test endpoint           | `"Reputesting!"`                               |
-| `POST` | `/reputest` | Test endpoint           | `"Reputesting!"`                               |
-| `GET`  | `/health`   | Health check            | `{"status": "healthy", "service": "reputest"}` |
-| `POST` | `/tweet`    | Post tweet to Twitter/X | Tweet response or error                        | 
-
-### Example API Usage
-
-```bash
-# Test the service
-curl http://localhost:3000/reputest
-
-# Check health
-curl http://localhost:3000/health
-
-# Post a tweet (requires Twitter API access token)
-curl -X POST http://localhost:3000/tweet
+```
+ Alice ──gmgv──▶ Bob ──gmgv──▶ Charlie ──gmgv──▶ Diana
+   │                              │
+   └──────────gmgv───────────────▶┘
 ```
 
-## Local Development
+- **Emitter**: The person sending good vibes (author of the #gmgv tweet)
+- **Sensor**: The person receiving good vibes (mentioned user)
 
-### 1. Clone and Setup
+### Degree Paths
+
+When Alice queries her vibe score with Diana:
+
+| Degree | Meaning | Example Path |
+|--------|---------|--------------|
+| **1st** | Direct connection | Alice → Diana |
+| **2nd** | One intermediary | Alice → Bob → Diana |
+| **3rd** | Two intermediaries | Alice → Bob → Charlie → Diana |
+| **4th** | Three intermediaries | Alice → X → Y → Z → Diana |
+
+### Query Your Vibes
+
+Tweet `@reputest @username?` to get your vibe scores with that user:
+
+```
+@reputest @elonmusk?
+```
+
+Reply:
+```
+Your vibes for @elonmusk are:
+1st degree: 0
+2nd degree: 3
+3rd degree: 12
+```
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- [Rust](https://rustup.rs/) 1.70+
+- [PostgreSQL](https://www.postgresql.org/) 14+
+- [Twitter Developer Account](https://developer.twitter.com/) with OAuth 2.0 app
+
+### 1. Clone & Setup
 
 ```bash
 git clone https://github.com/julerex/reputest.git
 cd reputest
 ```
 
-### 2. Configure Environment Variables
+### 2. Database Setup
 
-Create a `.env` file or set environment variables:
+Create the database and run the schema:
 
 ```bash
-# Required for Twitter functionality
-export xapi_access_token="your_access_token"
+createdb reputest
+psql -d reputest -f sql/database_ddl.sql
+```
+
+### 3. Environment Variables
+
+```bash
+# Required
+export DATABASE_URL="postgres://user:password@localhost/reputest"
+export TOKEN_ENCRYPTION_KEY="$(openssl rand -hex 32)"  # 32-byte hex key
 
 # Optional
-export PORT=3000
-export RUST_LOG=info
+export PORT=3000           # Default: 3000
+export RUST_LOG=info       # Options: debug, info, warn, error
 ```
 
-### 3. Build and Run
-
-#### Using Cargo (Development)
+### 4. Twitter Bot Authorization
 
 ```bash
-# Build the project
-cargo build
-
-# Run with debug logging
-RUST_LOG=debug cargo run
-
-# Run tests
-cargo test
-
-# Run with specific port
-PORT=8080 cargo run
+# Run the OAuth 2.0 authorization flow
+cargo run --bin authorize_bot
 ```
 
-#### Using Docker
+This will guide you through:
+1. Entering your Twitter OAuth 2.0 Client ID & Secret
+2. Authorizing the app in your browser
+3. Storing encrypted tokens in the database
+
+### 5. Run
 
 ```bash
-# Build the Docker image
+cargo run
+```
+
+Visit `http://localhost:3000` to see the Good Vibes dashboard.
+
+## 📡 API Reference
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/` | Good Vibes dashboard — displays all relationships with degree paths |
+| `GET` | `/reputest` | Test endpoint — returns `"Reputesting!"` |
+| `POST` | `/reputest` | Test endpoint — returns `"Reputesting!"` |
+| `GET` | `/health` | Health check — returns `{"status": "healthy", "service": "reputest"}` |
+
+### Dashboard
+
+The homepage displays a comprehensive table showing all sensor-emitter pairs with their path counts across all four degrees:
+
+| sensor | sensor name | emitter | emitter name | 1° | 2° | 3° | 4° |
+|--------|-------------|---------|--------------|----|----|----|----|
+| @alice | Alice Smith | @bob | Bob Jones | 1 | 0 | 0 | 0 |
+| @alice | Alice Smith | @charlie | Charlie Brown | 0 | 2 | 5 | 8 |
+
+## ⚙️ Configuration
+
+### Required Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `TOKEN_ENCRYPTION_KEY` | 32-byte hex key for AES-256-GCM encryption |
+
+### Optional Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `3000` | HTTP server port |
+| `RUST_LOG` | `info` | Log level (`debug`, `info`, `warn`, `error`) |
+
+### Generating an Encryption Key
+
+```bash
+# Generate a secure 32-byte key
+openssl rand -hex 32
+```
+
+⚠️ **Security Note**: The server will refuse to start without a valid encryption key. All OAuth tokens are encrypted at rest.
+
+## 🗄️ Database Schema
+
+### Core Tables
+
+```sql
+-- Twitter users in the vibes graph
+users (id, username, name, created_at)
+
+-- Good vibes relationships (directed graph edges)
+good_vibes (tweet_id, emitter_id, sensor_id, created_at)
+
+-- OAuth tokens (encrypted)
+access_tokens (id, token, created_at)
+refresh_tokens (id, token, created_at)
+
+-- Processed tweet tracking
+vibe_requests (tweet_id)
+```
+
+### Pre-built Views
+
+The schema includes optimized views for path counting:
+
+- `view_good_vibes_degree_one` through `view_good_vibes_degree_four`
+- `view_all_good_vibes_degrees` — Combined view used by the dashboard
+- `view_easy_*` variants with human-readable usernames
+
+## 📁 Project Structure
+
+```
+reputest/
+├── src/
+│   ├── main.rs          # Server initialization, routes, middleware
+│   ├── config.rs        # Environment configuration
+│   ├── handlers.rs      # HTTP route handlers
+│   ├── db.rs            # Database operations & graph queries
+│   ├── crypto.rs        # AES-256-GCM token encryption
+│   ├── cronjob.rs       # Scheduled Twitter monitoring
+│   ├── oauth.rs         # OAuth 2.0 token refresh
+│   ├── twitter/
+│   │   ├── mod.rs       # Twitter module exports
+│   │   ├── api.rs       # API client & utilities
+│   │   ├── search.rs    # Hashtag & mention search
+│   │   ├── tweets.rs    # Tweet posting & replies
+│   │   └── parsing.rs   # Tweet text parsing
+│   ├── lib.rs           # Library exports
+│   └── tests.rs         # Test suite
+├── scripts/
+│   ├── authorize_bot.rs      # OAuth 2.0 authorization flow
+│   ├── refresh_access_token.rs  # Manual token refresh
+│   └── encrypt_token.rs      # Token encryption utility
+├── sql/
+│   ├── database_ddl.sql      # Schema & views
+│   └── database_init.sql     # Initial data (if any)
+├── docs/
+│   ├── BOT_SETUP.md          # Detailed bot setup guide
+│   └── ...
+├── Cargo.toml
+├── Dockerfile
+└── fly.toml              # Fly.io deployment config
+```
+
+## 🐳 Docker
+
+```bash
+# Build
 docker build -t reputest .
 
-# Run the container
+# Run
 docker run -p 3000:3000 \
-  -e xapi_access_token="your_access_token" \
+  -e DATABASE_URL="postgres://..." \
+  -e TOKEN_ENCRYPTION_KEY="$(openssl rand -hex 32)" \
   reputest
 ```
 
-## Deployment
+## ☁️ Deployment
 
-### Fly.io Deployment
+### Fly.io
 
-The project includes Fly.io configuration for easy deployment:
+The project includes ready-to-use Fly.io configuration:
 
 ```bash
 # Install Fly CLI
 curl -L https://fly.io/install.sh | sh
 
-# Login to Fly.io
+# Login
 fly auth login
 
-# Deploy (first time)
-fly launch
+# Deploy
+fly launch  # First time
+fly deploy  # Updates
 
-# Deploy updates
-fly deploy
-
-# Set environment variables
-fly secrets set xapi_access_token="your_access_token"
+# Set secrets
+fly secrets set DATABASE_URL="postgres://..."
+fly secrets set TOKEN_ENCRYPTION_KEY="$(openssl rand -hex 32)"
 ```
 
-## Project Structure
+The app is configured for:
+- **Region**: Frankfurt (`fra`)
+- **Memory**: 1GB
+- **Port**: 8080 (internal)
+- **HTTPS**: Forced
+- **Minimum machines**: 1
 
-```text
-reputest/
-├── src/
-│   ├── main.rs              # Main application entry point
-│   ├── config.rs            # Configuration and environment handling
-│   ├── handlers.rs          # HTTP route handlers
-│   ├── twitter.rs           # Twitter/X API integration
-│   ├── oauth.rs             # OAuth 2.0 User Context authentication implementation
-│   ├── cronjob.rs           # Scheduled task management
-│   └── tests.rs             # Comprehensive test suite
-├── Cargo.toml               # Rust dependencies and project metadata
-├── Dockerfile               # Multi-stage Docker build configuration
-├── fly.toml                 # Fly.io deployment configuration
-├── Makefile                 # Build and deployment automation
-├── magiconfig.env           # Environment configuration template
-└── README.md               # This file
-```
-
-## Key Components
-
-### Twitter/X API Integration
-
-The service includes OAuth 2.0 User Context authentication for Twitter/X API v2:
-
-- **Authentication**: OAuth 2.0 User Context authentication for v2 endpoints
-- **Tweet Posting**: Post tweets via the `/tweet` endpoint using v2 API
-- **Hashtag Monitoring**: Automated search for tweets with specific hashtags using v2 search API
-- **Rate Limiting**: Proper handling of API rate limits and errors
-
-### Cronjob System
-
-Automated hashtag monitoring runs every hour:
-
-- **GMGV Hashtag**: Searches for tweets containing #gmgv from the past hour
-- **Logging**: All found tweets are logged with timestamps and IDs
-- **Error Handling**: Graceful handling of API errors and network issues
-- **Configurable**: Easy to modify schedule and hashtag via code
-
-### HTTP Server
-
-Built with Axum for high performance:
-
-- **Async/Await**: Full async support for concurrent request handling
-- **Middleware**: Request tracing and logging middleware
-- **Error Handling**: Comprehensive error responses with proper HTTP status codes
-- **Health Checks**: Built-in health monitoring endpoint
-
-## Development
+## 🔧 Development
 
 ### Running Tests
 
 ```bash
-# Run all tests
-cargo test
-
-# Run tests with output
-cargo test -- --nocapture
-
-# Run specific test module
-cargo test handlers
+cargo test                    # All tests
+cargo test -- --nocapture     # With output
+cargo test handlers           # Specific module
 ```
 
-### Code Quality
-
-The project includes comprehensive documentation and follows Rust best practices:
-
-- **Documentation**: All public functions include detailed rustdoc comments
-- **Error Handling**: Proper error propagation with custom error types
-- **Testing**: Unit tests for all major functionality
-- **Performance**: Optimized release builds with size optimization
-
-### Adding New Features
-
-1. **New Endpoints**: Add handlers in `src/handlers.rs` and register routes in `main.rs`
-2. **Twitter Integration**: Extend `src/twitter.rs` with new API endpoints
-3. **Scheduled Tasks**: Add new cronjobs in `src/cronjob.rs`
-4. **Configuration**: Add new environment variables in `src/config.rs`
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Twitter API Errors**: Verify the access token environment variable is set correctly
-2. **Port Conflicts**: Change the `PORT` environment variable if 3000 is in use
-3. **Docker Build Fails**: Ensure Docker is running and you have sufficient disk space
-4. **Deployment Issues**: Check cloud provider credentials and resource limits
-
-### Logs
-
-View application logs:
+### Building for Release
 
 ```bash
-# Local development
-RUST_LOG=debug cargo run
-
-# Docker
-docker logs <container_id>
-
-# Fly.io
-fly logs
-
+cargo build --release
 ```
 
-### Performance
+Release builds are optimized for size (`opt-level = "z"`) with LTO enabled.
 
-The service is optimized for production:
+### Utility Scripts
 
-- **Release Builds**: Uses `opt-level = "z"` for smallest binary size
-- **Link Time Optimization**: Enabled for better performance
-- **Single Codegen Unit**: Optimized compilation
-- **Panic Abort**: Smaller binary size in production
+```bash
+# Authorize bot (OAuth 2.0 flow)
+cargo run --bin authorize_bot
 
-## Contributing
+# Manually refresh access token
+cargo run --bin refresh_token
+
+# Encrypt a token for database storage
+cargo run --bin encrypt_token
+```
+
+## 🔒 Security
+
+- **Token Encryption**: All OAuth tokens encrypted with AES-256-GCM
+- **Rate Limiting**: 30 requests/minute per IP via `tower_governor`
+- **Security Headers**: X-Content-Type-Options, X-Frame-Options, CSP, etc.
+- **XSS Protection**: HTML escaping on all user-generated content
+- **Input Validation**: Log sanitization to prevent injection attacks
+- **Automatic Cleanup**: Old tokens purged after 24 hours
+
+## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes with proper documentation
-4. Run tests (`cargo test`)
-5. Commit your changes (`git commit -m 'Add amazing feature'`)
-6. Push to the branch (`git push origin feature/amazing-feature`)
+2. Create a feature branch (`git checkout -b feature/amazing`)
+3. Make your changes with tests
+4. Run `cargo test` and `cargo clippy`
+5. Commit (`git commit -m 'Add amazing feature'`)
+6. Push (`git push origin feature/amazing`)
 7. Open a Pull Request
 
-## License
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+## 📄 License
 
-## Acknowledgments
+MIT License — see [LICENSE](LICENSE) for details.
 
-- Built with [Axum](https://github.com/tokio-rs/axum) web framework
-- Twitter/X API integration using OAuth 2.0 User Context authentication
-- Docker multi-stage builds for optimized containers
-- Fly.io for deployment
+## 🙏 Acknowledgments
+
+- [Axum](https://github.com/tokio-rs/axum) — Web framework
+- [SQLx](https://github.com/launchbadge/sqlx) — Async PostgreSQL
+- [tokio-cron-scheduler](https://github.com/mvniekerk/tokio-cron-scheduler) — Job scheduling
+- [tower-governor](https://github.com/benwis/tower-governor) — Rate limiting
+
+---
+
+<p align="center">
+  <sub>Built with 🦀 and good vibes</sub>
+</p>

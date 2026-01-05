@@ -7,7 +7,7 @@ CONTAINER_PORT ?= 3000
 CONTAINER_RUST_LOG ?= info
 CONTAINER_CPU ?= 0.5
 CONTAINER_MEMORY ?= 0.5
-FLY_DB_CLUSTER_ID ?= q49ypo4wvmzr17ln
+FLY_DB_CLUSTER_ID ?= your-cluster-id
 
 -include config.env
 
