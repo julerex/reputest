@@ -24,7 +24,7 @@
 
 ## 🎯 What It Does
 
-The [`reputest` bot](https://x.com/reputest) monitors Twitter/X for **#gmgv** (Gives Me Good Vibes) hashtag tweets and builds a directed social graph of positive relationships. When someone tweets `#gmgv @username` or `#gmgv username`, they're attesting to the good vibes they get from that X user, creating a connection in the reputation graph.
+The [`reputest`](https://x.com/reputest) bot monitors Twitter/X for **#gmgv** (Gives Me Good Vibes) hashtag tweets and builds a directed social graph of positive relationships. When someone tweets `#gmgv @username` (or `#gmgv username` for stealth mode), they're attesting to the good vibes they get from that X user, creating a connection in the reputation graph.
 
 **Key Features:**
 
