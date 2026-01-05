@@ -7,7 +7,9 @@ use crate::db::{
     get_good_vibes_count, get_user_id_by_username, get_vibe_score_one, get_vibe_score_three,
     get_vibe_score_two, has_vibe_request, save_vibe_request,
 };
-use crate::twitter::{reply_to_tweet, search_mentions, search_tweets_with_hashtag};
+use crate::twitter::{
+    reply_to_tweet, sanitize_for_logging, search_mentions, search_tweets_with_hashtag,
+};
 use log::{debug, error, info};
 use sqlx::PgPool;
 use tokio_cron_scheduler::{Job, JobScheduler};
@@ -297,7 +299,12 @@ async fn send_reply_and_mark_processed(
     tweet_id: &str,
     author_username: &str,
 ) {
-    info!("Replying to tweet {} with: {}", tweet_id, reply_text);
+    // SECURITY: Sanitize text before logging to prevent log injection
+    info!(
+        "Replying to tweet {} with: {}",
+        tweet_id,
+        sanitize_for_logging(reply_text, 150)
+    );
 
     match reply_to_tweet(reply_text, tweet_id).await {
         Ok(_) => {

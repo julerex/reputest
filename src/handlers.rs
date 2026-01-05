@@ -170,10 +170,11 @@ pub async fn handle_root(State(pool): State<PgPool>) -> Result<Html<String>, (St
             Ok(Html(html))
         }
         Err(e) => {
+            // SECURITY: Log detailed error server-side but return generic message to client
             error!("Failed to query view_all_good_vibes_degrees: {}", e);
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to load data: {}", e),
+                "An internal error occurred. Please try again later.".to_string(),
             ))
         }
     }

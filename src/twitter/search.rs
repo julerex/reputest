@@ -615,7 +615,10 @@ pub async fn search_mentions() -> Result<
     let response_text =
         make_authenticated_request(&mut config, &pool, request_builder, "search_mentions").await?;
 
-    debug!("Mentions search response: {} bytes received", response_text.len());
+    debug!(
+        "Mentions search response: {} bytes received",
+        response_text.len()
+    );
     let json_response: serde_json::Value = serde_json::from_str(&response_text)?;
 
     // Create a map of user ID to username for quick lookup

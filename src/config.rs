@@ -321,11 +321,6 @@ impl TwitterConfig {
 ///
 /// The port number as a u16.
 ///
-/// # Panics
-///
-/// This function will panic if the `PORT` environment variable is set to a value
-/// that cannot be parsed as a valid port number.
-///
 /// # Example
 ///
 /// ```rust
@@ -338,8 +333,21 @@ impl TwitterConfig {
 /// let port = get_server_port(); // Returns 3000
 /// ```
 pub fn get_server_port() -> u16 {
-    env::var("PORT")
-        .unwrap_or_else(|_| "3000".to_string())
-        .parse()
-        .expect("PORT must be a valid number")
+    const DEFAULT_PORT: u16 = 3000;
+
+    match env::var("PORT") {
+        Ok(port_str) => match port_str.parse::<u16>() {
+            Ok(port) => port,
+            Err(e) => {
+                log::warn!(
+                    "Invalid PORT value '{}': {}. Using default port {}",
+                    port_str,
+                    e,
+                    DEFAULT_PORT
+                );
+                DEFAULT_PORT
+            }
+        },
+        Err(_) => DEFAULT_PORT,
+    }
 }

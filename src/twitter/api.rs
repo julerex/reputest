@@ -10,15 +10,42 @@ use sqlx::PgPool;
 use crate::config::TwitterConfig;
 use crate::oauth::build_oauth2_user_context_header;
 
-/// Sanitizes API response text for safe logging.
+/// Sanitizes text for safe logging by truncating and escaping control characters.
 ///
-/// This function truncates long responses to prevent accidental exposure
-/// of sensitive data in logs.
-fn sanitize_response_for_logging(response: &str, max_len: usize) -> String {
-    if response.len() > max_len {
-        format!("{}... [truncated, {} total bytes]", &response[..max_len], response.len())
+/// This function:
+/// - Truncates long text to prevent log flooding
+/// - Replaces control characters that could manipulate log output
+/// - Escapes newlines to prevent log injection
+///
+/// # Parameters
+///
+/// - `text`: The text to sanitize
+/// - `max_len`: Maximum length before truncation
+///
+/// # Returns
+///
+/// A sanitized string safe for logging
+pub(crate) fn sanitize_for_logging(text: &str, max_len: usize) -> String {
+    // Replace control characters and newlines to prevent log injection
+    let sanitized: String = text
+        .chars()
+        .map(|c| match c {
+            '\n' => ' ',
+            '\r' => ' ',
+            '\t' => ' ',
+            c if c.is_control() => '?',
+            c => c,
+        })
+        .collect();
+
+    if sanitized.len() > max_len {
+        format!(
+            "{}... [truncated, {} total bytes]",
+            &sanitized[..max_len],
+            text.len()
+        )
     } else {
-        response.to_string()
+        sanitized
     }
 }
 
@@ -129,7 +156,7 @@ pub(crate) async fn make_authenticated_request(
                         debug!(
                             "Error response for '{}': {}",
                             operation_name,
-                            sanitize_response_for_logging(&error_text, 200)
+                            sanitize_for_logging(&error_text, 200)
                         );
                         return Err(format!(
                             "Twitter API error after token refresh ({})",
@@ -166,14 +193,11 @@ pub(crate) async fn make_authenticated_request(
 
     // Handle other error status codes
     let error_text = response.text().await?;
-    error!(
-        "Operation '{}' failed - Status: {}",
-        operation_name, status
-    );
+    error!("Operation '{}' failed - Status: {}", operation_name, status);
     debug!(
         "Error response for '{}': {}",
         operation_name,
-        sanitize_response_for_logging(&error_text, 200)
+        sanitize_for_logging(&error_text, 200)
     );
     Err(format!(
         "Twitter API error for operation '{}' ({})",

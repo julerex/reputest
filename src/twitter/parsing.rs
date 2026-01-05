@@ -3,6 +3,10 @@
 //! This module contains functions for parsing tweet text to extract mentions,
 //! hashtags, and other structured content.
 
+/// Maximum allowed length for text input to prevent ReDoS attacks.
+/// Twitter's max tweet length is 280 characters, so 500 is generous.
+const MAX_INPUT_LENGTH: usize = 500;
+
 /// Extracts the vibe emitter username from tweet text where #gmgv directly follows.
 /// The word before #gmgv can optionally start with @ - it will be stripped if present.
 /// Examples: "@alice #gmgv" ✓, "alice #gmgv" ✓, "alice has #gmgv" ✗
@@ -15,8 +19,17 @@
 /// # Returns
 ///
 /// - `Some(username)`: The username before #gmgv (without @ prefix)
-/// - `None`: If no valid pattern is found
+/// - `None`: If no valid pattern is found or input exceeds maximum length
 pub(crate) fn extract_vibe_emitter(text: &str, exclude_username: Option<&str>) -> Option<String> {
+    // SECURITY: Limit input length to prevent ReDoS attacks
+    if text.len() > MAX_INPUT_LENGTH {
+        log::warn!(
+            "Input text exceeds maximum length ({} > {}), rejecting",
+            text.len(),
+            MAX_INPUT_LENGTH
+        );
+        return None;
+    }
     // Common English words that shouldn't be treated as usernames
     let excluded_words = [
         "the", "a", "an", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had",
@@ -64,8 +77,18 @@ pub(crate) fn extract_vibe_emitter(text: &str, exclude_username: Option<&str>) -
 /// # Returns
 ///
 /// - `Some(username)`: The username if found in the specific query format
-/// - `None`: If the tweet doesn't match the required format
+/// - `None`: If the tweet doesn't match the required format or input exceeds maximum length
 pub fn extract_mention_with_question(text: &str) -> Option<String> {
+    // SECURITY: Limit input length to prevent ReDoS attacks
+    if text.len() > MAX_INPUT_LENGTH {
+        log::warn!(
+            "Input text exceeds maximum length ({} > {}), rejecting",
+            text.len(),
+            MAX_INPUT_LENGTH
+        );
+        return None;
+    }
+
     // Use regex to match only the specific patterns: "@reputest username ?" or "@reputest @username ?"
     // The pattern ensures the tweet starts with "@reputest" followed by whitespace, then username, optional whitespace, then "?"
     let re = regex::Regex::new(r"^@reputest\s+(@?[a-zA-Z0-9_]{1,15})\s*\?$").ok()?;

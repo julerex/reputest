@@ -27,6 +27,7 @@
 //! - `POST /tweet`: Posts a tweet to Twitter/X (requires API credentials)
 
 use axum::{
+    http::HeaderValue,
     routing::{get, post},
     Router,
 };
@@ -37,7 +38,7 @@ use tower::ServiceBuilder;
 use tower_governor::{
     governor::GovernorConfigBuilder, key_extractor::SmartIpKeyExtractor, GovernorLayer,
 };
-use tower_http::trace::TraceLayer;
+use tower_http::{set_header::SetResponseHeaderLayer, trace::TraceLayer};
 
 mod config;
 mod cronjob;
@@ -102,7 +103,10 @@ async fn main() {
 
     // Validate security configuration at startup
     if let Err(e) = crypto::validate_encryption_config() {
-        log::error!("SECURITY ERROR: Token encryption is not properly configured: {}", e);
+        log::error!(
+            "SECURITY ERROR: Token encryption is not properly configured: {}",
+            e
+        );
         log::error!("Set TOKEN_ENCRYPTION_KEY environment variable with a 32-byte hex key.");
         log::error!("Generate a key with: openssl rand -hex 32");
         log::error!("Refusing to start without encryption configured.");
@@ -181,7 +185,30 @@ async fn main() {
                 .layer(TraceLayer::new_for_http())
                 .layer(GovernorLayer {
                     config: governor_config,
-                }),
+                })
+                // SECURITY: Add security headers to all responses
+                .layer(SetResponseHeaderLayer::overriding(
+                    axum::http::header::X_CONTENT_TYPE_OPTIONS,
+                    HeaderValue::from_static("nosniff"),
+                ))
+                .layer(SetResponseHeaderLayer::overriding(
+                    axum::http::header::X_FRAME_OPTIONS,
+                    HeaderValue::from_static("DENY"),
+                ))
+                .layer(SetResponseHeaderLayer::overriding(
+                    axum::http::header::X_XSS_PROTECTION,
+                    HeaderValue::from_static("1; mode=block"),
+                ))
+                .layer(SetResponseHeaderLayer::overriding(
+                    axum::http::header::CONTENT_SECURITY_POLICY,
+                    HeaderValue::from_static(
+                        "default-src 'self'; style-src 'self' 'unsafe-inline'",
+                    ),
+                ))
+                .layer(SetResponseHeaderLayer::overriding(
+                    axum::http::header::REFERRER_POLICY,
+                    HeaderValue::from_static("strict-origin-when-cross-origin"),
+                )),
         );
 
     // Get the server port and bind address

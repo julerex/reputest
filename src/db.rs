@@ -65,12 +65,11 @@ pub async fn get_latest_refresh_token(
 
             info!("Found refresh token created at {}", created_at);
 
-            // Decrypt if encryption is configured
-            let token = if is_encryption_configured() {
-                decrypt_token(&stored_token)?
-            } else {
-                stored_token
-            };
+            // SECURITY: Always require decryption - tokens must be stored encrypted
+            if !is_encryption_configured() {
+                return Err("TOKEN_ENCRYPTION_KEY is required to read tokens - refusing to read potentially unencrypted data".into());
+            }
+            let token = decrypt_token(&stored_token)?;
 
             Ok(Some(token))
         }
@@ -109,7 +108,9 @@ pub async fn save_refresh_token(
 
     // Encryption is mandatory - fail if not configured
     if !is_encryption_configured() {
-        return Err("TOKEN_ENCRYPTION_KEY must be set - refusing to store tokens in plaintext".into());
+        return Err(
+            "TOKEN_ENCRYPTION_KEY must be set - refusing to store tokens in plaintext".into(),
+        );
     }
 
     let token_to_store = encrypt_token(token)?;
@@ -125,7 +126,10 @@ pub async fn save_refresh_token(
     .await?;
 
     if deleted.rows_affected() > 0 {
-        info!("Cleaned up {} old refresh token(s)", deleted.rows_affected());
+        info!(
+            "Cleaned up {} old refresh token(s)",
+            deleted.rows_affected()
+        );
     }
 
     sqlx::query(
@@ -178,12 +182,11 @@ pub async fn get_latest_access_token(
 
             info!("Found access token created at {}", created_at);
 
-            // Decrypt if encryption is configured
-            let token = if is_encryption_configured() {
-                decrypt_token(&stored_token)?
-            } else {
-                stored_token
-            };
+            // SECURITY: Always require decryption - tokens must be stored encrypted
+            if !is_encryption_configured() {
+                return Err("TOKEN_ENCRYPTION_KEY is required to read tokens - refusing to read potentially unencrypted data".into());
+            }
+            let token = decrypt_token(&stored_token)?;
 
             Ok(Some(token))
         }
@@ -222,7 +225,9 @@ pub async fn save_access_token(
 
     // Encryption is mandatory - fail if not configured
     if !is_encryption_configured() {
-        return Err("TOKEN_ENCRYPTION_KEY must be set - refusing to store tokens in plaintext".into());
+        return Err(
+            "TOKEN_ENCRYPTION_KEY must be set - refusing to store tokens in plaintext".into(),
+        );
     }
 
     let token_to_store = encrypt_token(token)?;

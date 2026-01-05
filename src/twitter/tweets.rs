@@ -10,7 +10,7 @@ use crate::config::TwitterConfig;
 use crate::db;
 use crate::oauth::build_oauth2_user_context_header;
 
-use super::api::make_authenticated_request;
+use super::api::{make_authenticated_request, sanitize_for_logging};
 
 /// Replies to a tweet using the Twitter/X API v2 endpoint.
 ///
@@ -36,9 +36,11 @@ pub async fn reply_to_tweet(
     text: &str,
     reply_to_tweet_id: &str,
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    // SECURITY: Sanitize user input before logging to prevent log injection
     info!(
         "Starting reply operation to tweet {} with text: '{}'",
-        reply_to_tweet_id, text
+        reply_to_tweet_id,
+        sanitize_for_logging(text, 100)
     );
 
     // Get database pool and load Twitter API credentials from database

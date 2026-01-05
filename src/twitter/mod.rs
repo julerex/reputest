@@ -15,6 +15,8 @@ pub use parsing::extract_mention_with_question;
 pub use search::{search_mentions, search_tweets_with_hashtag};
 pub use tweets::reply_to_tweet;
 
-// Crate-internal re-exports (used by tests)
+// Crate-internal re-exports (used by tests and other modules)
+#[allow(unused_imports)]
+pub(crate) use api::sanitize_for_logging;
 #[allow(unused_imports)]
 pub(crate) use parsing::extract_vibe_emitter;

@@ -17,8 +17,8 @@ categories = ["web-programming", "api-bindings"]
 axum = "0.7"
 # Middleware and service abstractions
 tower = "0.4"
-# HTTP middleware for Tower (CORS, tracing)
-tower-http = { version = "0.5", features = ["cors", "trace"] }
+# HTTP middleware for Tower (CORS, tracing, security headers)
+tower-http = { version = "0.5", features = ["cors", "trace", "set-header"] }
 # Async runtime
 tokio = { version = "1", features = ["rt", "macros", "rt-multi-thread", "signal"] }
 # Logging facade
@@ -83,3 +83,8 @@ path = "scripts/authorize_bot.rs"
 [[bin]]
 name = "refresh_token"
 path = "scripts/refresh_access_token.rs"
+
+# Binary for token encryption
+[[bin]]
+name = "encrypt_token"
+path = "scripts/encrypt_token.rs"
