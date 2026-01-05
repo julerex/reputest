@@ -1,136 +1,192 @@
 # Twitter Bot Setup Guide
 
-This guide will help you set up OAuth 2.0 User Context authentication for your Twitter bot.
+Complete guide for configuring OAuth 2.0 User Context authentication with the Twitter/X Developer Portal.
+
+> **Quick Start**: If you just need the commands, run `cargo run --bin authorize_bot` and follow the prompts.
+
+---
 
 ## Prerequisites
 
-1. **Twitter Developer Account**: You need a Twitter Developer account
-2. **Twitter App**: Create a Twitter App in the Developer Portal
-3. **OAuth 2.0 Settings**: Configure your app for OAuth 2.0
+- A Twitter/X account
+- [Twitter Developer Account](https://developer.twitter.com/) (apply if you don't have one)
+- Rust toolchain installed
 
-## Step 1: Configure Your Twitter App
+---
 
-1. Go to the [Twitter Developer Portal](https://developer.twitter.com/)
-2. Under the "Projects and Apps" dropdown, select your Project
-3. Under **Apps** section, locate your Project and select "App settings" (the gear icon)
-4. You should be directed to the **Settings** tab of your App
-3. Under the **User authentication settings** section, select the **Edit** button.
-4. Enable OAuth 2.0
-5. Set the following:
-   - **App Type**: Single Page App (for PKCE) / "Web App, Automated App or Bot"
-   - **Callback URI / Redirect URL**: `https://reputest.fly.dev/callback`
-   - **Website URL**: `https://reputest.fly.dev`
+## Step 1: Create a Twitter App
 
-6. Save your settings and note down:
-   - **Client ID**
-   - **Client Secret**
+### 1.1 Access the Developer Portal
 
-## Step 2: Run the Authorization Script
+1. Go to [developer.twitter.com](https://developer.twitter.com/)
+2. Sign in with your Twitter account
+3. Navigate to **Projects & Apps** → Your Project
 
-The authorization script will help you get the access token for your bot.
+### 1.2 Create or Configure Your App
+
+1. Click **"+ Add App"** or select your existing app
+2. Click the **gear icon** to open App Settings
+3. Go to the **Settings** tab
+
+### 1.3 Configure User Authentication
+
+1. Find **"User authentication settings"** section
+2. Click **"Set up"** or **"Edit"**
+3. Configure the following:
+
+| Setting | Value |
+|---------|-------|
+| **OAuth 2.0** | ✅ Enabled |
+| **Type of App** | `Web App, Automated App or Bot` |
+| **Callback URI** | `http://localhost:8080/callback` |
+| **Website URL** | `https://reputest.fly.dev` (or your domain) |
+
+4. **Required Scopes** — Select these under "App permissions":
+   - `tweet.read` — Read tweets
+   - `tweet.write` — Post and delete tweets
+   - `users.read` — Read user profile info
+   - `offline.access` — Get refresh tokens
+
+5. Click **Save**
+
+### 1.4 Get Your Credentials
+
+After saving, note down your:
+- **Client ID** (public identifier)
+- **Client Secret** (keep this secure!)
+
+---
+
+## Step 2: Run the Authorization Flow
+
+The built-in script handles the OAuth 2.0 PKCE flow:
 
 ```bash
-# Build and run the authorization script
 cargo run --bin authorize_bot
 ```
 
 The script will:
-1. Ask for your Client ID and Client Secret
-2. Ask for your Redirect URI
-3. Generate a secure authorization URL
-4. Guide you through the browser authorization process
-5. Exchange the authorization code for an access token
 
-## Step 3: Set Environment Variables
+1. **Prompt for credentials** — Enter your Client ID and Client Secret
+2. **Generate auth URL** — A secure authorization URL with PKCE challenge
+3. **Open browser** — Authorize the app with your Twitter account
+4. **Exchange code** — Automatically exchange the auth code for tokens
+5. **Store encrypted** — Save tokens to the database (encrypted with AES-256-GCM)
 
-After running the authorization script, you'll get an access token and potentially a refresh token. Set them as environment variables:
+### Expected Output
 
-```bash
-# Required: For all operations (read and write) - OAuth 2.0 User Context
-export xapi_access_token="your_access_token_here"
+```
+🔐 Twitter Bot Authorization
+Enter your Client ID: abc123...
+Enter your Client Secret: ***
+Enter Redirect URI [http://localhost:8080/callback]: 
 
-# Optional: For automatic token refresh (recommended)
-export xapi_refresh_token="your_refresh_token_here"
-export XAPI_CLIENT_ID="your_client_id_here"
-export XAPI_CLIENT_SECRET="your_client_secret_here"
+Opening browser for authorization...
+Waiting for callback...
+
+✅ Authorization successful!
+Access token stored in database (encrypted)
+Refresh token stored in database (encrypted)
 ```
 
-**Note**: If you set the refresh token and client credentials, your bot will automatically refresh expired access tokens without manual intervention.
+---
 
-## Step 4: Test Your Bot
+## Step 3: Token Management
+
+### How Tokens Work
+
+| Token | Lifespan | Purpose |
+|-------|----------|---------|
+| **Access Token** | ~2 hours | Authenticates API requests |
+| **Refresh Token** | ~6 months | Obtains new access tokens |
+
+### Automatic Refresh
+
+The service automatically refreshes expired tokens:
+
+1. Makes API request
+2. Receives 401 Unauthorized
+3. Uses refresh token to get new access token
+4. Retries the original request
+5. Saves new tokens to database
+
+### Manual Refresh
+
+If automatic refresh fails:
 
 ```bash
-# Test posting a tweet
-curl -X POST http://localhost:3000/tweet
-```
-
-## Step 5: Token Refresh (Automatic!)
-
-OAuth 2.0 User Context tokens expire. Your bot now handles this automatically:
-
-### Automatic Token Refresh (Default Behavior)
-If you've set the required environment variables (`xapi_refresh_token`, `XAPI_CLIENT_ID`, `XAPI_CLIENT_SECRET`), your bot will:
-
-1. **Detect 401 errors** automatically when making API calls
-2. **Refresh the access token** using the stored refresh token
-3. **Retry the failed request** with the new token
-4. **Log the entire process** for debugging
-
-### Manual Refresh (Fallback)
-If automatic refresh is not configured or fails, you can manually refresh tokens:
-
-```bash
-# Use the refresh token utility
 cargo run --bin refresh_token
 ```
 
-### Monitoring Token Refresh
-The bot logs all token refresh activities:
-- When tokens are refreshed automatically
-- When refresh fails and manual intervention is needed
-- Token expiration times and refresh success/failure
+### Re-Authorization
 
-## Alternative: OAuth 1.0a for Bots
+If your refresh token expires (after ~6 months of inactivity):
 
-If you prefer a simpler approach for bots, you can also use OAuth 1.0a:
+```bash
+cargo run --bin authorize_bot
+```
 
-1. In your Twitter App settings, enable OAuth 1.0a
-2. Generate Access Token and Access Token Secret
-3. Use these credentials directly (no authorization flow needed)
+---
 
-However, OAuth 2.0 User Context is the recommended approach for new applications.
+## Step 4: Verify Setup
 
-## Security Best Practices
+### Check Database Tokens
 
-1. **Never commit tokens to version control**
-2. **Use environment variables or secure secret management**
-3. **Rotate tokens regularly**
-4. **Monitor your app's usage in the Twitter Developer Portal**
-5. **Implement proper error handling and rate limiting**
+```sql
+-- Check if tokens exist (don't display actual values!)
+SELECT id, LENGTH(token) as token_length, created_at 
+FROM access_tokens 
+ORDER BY created_at DESC 
+LIMIT 1;
+```
 
-## Troubleshooting
+### Test the Bot
 
-### Common Issues:
+Start the server and check logs:
 
-1. **"Invalid client" error**: Check your Client ID and Client Secret
-2. **"Invalid redirect URI"**: Ensure the redirect URI matches exactly
-3. **"Invalid scope"**: Make sure you've selected the correct scopes in your app settings
-4. **"Token expired"**: Re-run the authorization script to get a new token
+```bash
+RUST_LOG=info cargo run
+```
 
-### Getting Help:
+The bot should start monitoring for #gmgv hashtags within 5 minutes.
 
-- Check the [Twitter API Documentation](https://developer.twitter.com/en/docs)
-- Review your app settings in the Developer Portal
-- Check the error messages in your bot's logs
+---
 
-## Next Steps
+## Scope Reference
 
-Once your bot is authenticated:
+| Scope | Permission | Used For |
+|-------|-----------|----------|
+| `tweet.read` | Read tweets | Searching #gmgv hashtags |
+| `tweet.write` | Post tweets | Replying to vibe queries |
+| `users.read` | Read profiles | Getting user info |
+| `offline.access` | Refresh tokens | Automatic token renewal |
 
-1. Implement your bot's logic
-2. Add proper error handling
-3. Set up monitoring and logging
-4. Consider implementing automatic token refresh
-5. Deploy your bot to a server
+---
 
-Your bot should now be able to post tweets using OAuth 2.0 User Context authentication!
+## Security Checklist
+
+- [ ] Never commit Client Secret to version control
+- [ ] Store `TOKEN_ENCRYPTION_KEY` securely (Fly.io secrets, etc.)
+- [ ] Tokens are encrypted at rest with AES-256-GCM
+- [ ] Rotate credentials if compromised
+- [ ] Monitor usage in Developer Portal
+
+---
+
+## Common Issues
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| `Invalid client` | Wrong Client ID/Secret | Verify credentials in Developer Portal |
+| `Invalid redirect_uri` | URI mismatch | Must match exactly in app settings |
+| `Invalid scope` | Missing permissions | Enable required scopes in app settings |
+| `Token expired` | Access token expired | Should auto-refresh; run `refresh_token` if not |
+| `Refresh token invalid` | Token revoked/expired | Re-run `authorize_bot` |
+
+---
+
+## Additional Resources
+
+- [Twitter OAuth 2.0 Documentation](https://developer.twitter.com/en/docs/authentication/oauth-2-0)
+- [Twitter API v2 Reference](https://developer.twitter.com/en/docs/twitter-api)
+- [Rate Limits](https://developer.twitter.com/en/docs/twitter-api/rate-limits)

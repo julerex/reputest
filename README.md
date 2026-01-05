@@ -229,8 +229,10 @@ reputest/
 │   ├── database_ddl.sql      # Schema & views
 │   └── database_init.sql     # Initial data (if any)
 ├── docs/
-│   ├── BOT_SETUP.md          # Detailed bot setup guide
-│   └── ...
+│   ├── BOT_SETUP.md          # Twitter OAuth 2.0 setup guide
+│   ├── CLOUDFLARE_DOMAIN_SETUP.md  # Custom domain configuration
+│   ├── TROUBLESHOOTING.md    # Common issues & solutions
+│   └── DEBUGGING.md          # Developer debugging guide
 ├── Cargo.toml
 ├── Dockerfile
 └── fly.toml              # Fly.io deployment config
