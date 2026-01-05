@@ -17,3 +17,9 @@ Thumbs.db
 # Logs
 *.log
 scratchpad.txt
+
+# Environment (but NOT .env.example)
+.env
+.env.local
+.env.*.local
+config.env

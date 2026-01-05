@@ -1,7 +1,15 @@
 # Makefile for reputest deployment
 
-# Load configuration from config.env if it exists
--include magiconfig.env
+# Default configuration (override via env vars or config.env)
+DOCKER_IMAGE_NAME ?= reputest
+DOCKER_IMAGE_TAG ?= latest
+CONTAINER_PORT ?= 3000
+CONTAINER_RUST_LOG ?= info
+CONTAINER_CPU ?= 0.5
+CONTAINER_MEMORY ?= 0.5
+FLY_DB_CLUSTER_ID ?= q49ypo4wvmzr17ln
+
+-include config.env
 
 # Derived variables
 FULL_IMAGE_NAME = $(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)
@@ -107,42 +115,45 @@ bot-post-tweet: ## Post a tweet using interactive script
 
 
 # Database targets ############################################################
-# NOTE: Database connection string (q49ypo4wvmzr17ln) may need to be updated if app name changes
+# NOTE: The FLY_DB_CLUSTER_ID is specific to the maintainer's Fly.io deployment.
+# If you fork this repo, override it with your own cluster ID:
+#   export FLY_DB_CLUSTER_ID=your-cluster-id
+# Get yours with: fly postgres list
 
 .PHONY: fly-db-connect
 fly-db-connect: ## Connect to database
-	fly mpg connect q49ypo4wvmzr17ln -d reputest -u fly-user
+	fly mpg connect $(FLY_DB_CLUSTER_ID) -d reputest -u fly-user
 
 .PHONY: fly-db-counts
 fly-db-counts: ## Show record counts for all tables
 	@echo "SELECT tablename AS table, \
 		(xpath('/row/count/text()', query_to_xml('SELECT COUNT(*) FROM ' || quote_ident(tablename), false, true, '')))[1]::text::bigint AS count \
 		FROM pg_tables WHERE schemaname = 'public' ORDER BY count DESC;" \
-		| fly mpg connect q49ypo4wvmzr17ln -d reputest -u fly-user
+		| fly mpg connect $(FLY_DB_CLUSTER_ID) -d reputest -u fly-user
 
 .PHONY: fly-db-latest-vibes
 fly-db-latest-vibe-requests: ## Show latest 20 vibe_requests records
 	@echo "SELECT * FROM view_good_vibes ORDER BY created_at DESC LIMIT 20;" \
-		| fly mpg connect q49ypo4wvmzr17ln -d reputest -u fly-user
+		| fly mpg connect $(FLY_DB_CLUSTER_ID) -d reputest -u fly-user
 
 .PHONY: fly-db-good-vibes-all 
 fly-db-good-vibes-all: ## Show all good_vibes records
 	@echo "SELECT * FROM good_vibes ORDER BY created_at DESC;" \
-		| fly mpg connect q49ypo4wvmzr17ln -d reputest -u fly-user
+		| fly mpg connect $(FLY_DB_CLUSTER_ID) -d reputest -u fly-user
 
 .PHONY: fly-db-schema
 fly-db-schema: ## Show database schema
 	@echo "=== TABLES ==="
-	@echo "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;" | fly mpg connect q49ypo4wvmzr17ln -d reputest -u fly-user
+	@echo "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;" | fly mpg connect $(FLY_DB_CLUSTER_ID) -d reputest -u fly-user
 	@echo
 	@echo "=== INDEXES ==="
-	@echo "SELECT indexname FROM pg_indexes WHERE schemaname = 'public' ORDER BY indexname;" | fly mpg connect q49ypo4wvmzr17ln -d reputest -u fly-user
+	@echo "SELECT indexname FROM pg_indexes WHERE schemaname = 'public' ORDER BY indexname;" | fly mpg connect $(FLY_DB_CLUSTER_ID) -d reputest -u fly-user
 	@echo
 	@echo "=== VIEWS ==="
-	@echo "SELECT viewname FROM pg_views WHERE schemaname = 'public' ORDER BY viewname;" | fly mpg connect q49ypo4wvmzr17ln -d reputest -u fly-user
+	@echo "SELECT viewname FROM pg_views WHERE schemaname = 'public' ORDER BY viewname;" | fly mpg connect $(FLY_DB_CLUSTER_ID) -d reputest -u fly-user
 	@echo
 	@echo "=== MATERIALIZED VIEWS ==="
-	@echo "SELECT matviewname FROM pg_matviews WHERE schemaname = 'public' ORDER BY matviewname;" | fly mpg connect q49ypo4wvmzr17ln -d reputest -u fly-user
+	@echo "SELECT matviewname FROM pg_matviews WHERE schemaname = 'public' ORDER BY matviewname;" | fly mpg connect $(FLY_DB_CLUSTER_ID) -d reputest -u fly-user
 
 
 

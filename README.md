@@ -1,5 +1,9 @@
 # Reputest - Rust Web Service with Twitter/X API Integration
 
+[![Rust CI](https://github.com/julerex/reputest/actions/workflows/rust-ci.yml/badge.svg)](https://github.com/julerex/reputest/actions/workflows/rust-ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Rust](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org/)
+
 A modern Rust web service built with Axum that provides HTTP endpoints for testing and demonstration purposes, featuring Twitter/X API integration using OAuth 2.0 User Context authentication for posting tweets and automated hashtag monitoring via cronjobs.
 
 ## Features
@@ -109,7 +113,7 @@ curl -X POST http://localhost:3000/tweet
 ### 1. Clone and Setup
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/julerex/reputest.git
 cd reputest
 ```
 

@@ -2,12 +2,12 @@
 name = "reputest"
 version = "0.1.0"
 edition = "2021"
-authors = ["Your Name <your.email@example.com>"]
+authors = ["Julian le Roux"]
 description = "A Rust web service that provides HTTP endpoints for testing and demonstration purposes, with Twitter/X API integration using OAuth 2.0 User Context authentication"
 license = "MIT"
-repository = "https://github.com/yourusername/reputest"
-homepage = "https://github.com/yourusername/reputest"
-documentation = "https://docs.rs/reputest"
+repository = "https://github.com/julerex/reputest"
+homepage = "https://github.com/julerex/reputest"
+documentation = "https://github.com/julerex/reputest#readme"
 readme = "README.md"
 keywords = ["web", "api", "twitter", "oauth2", "user-context", "axum", "rust"]
 categories = ["web-programming", "api-bindings"]
