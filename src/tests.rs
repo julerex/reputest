@@ -26,9 +26,7 @@ use crate::{
         get_db_pool, get_vibe_score_one, get_vibe_score_three, get_vibe_score_two, save_good_vibes,
         save_user,
     },
-    handlers::{
-        handle_health, handle_reputest_get, handle_reputest_post, handle_root, handle_tweet,
-    },
+    handlers::{handle_health, handle_reputest_get, handle_reputest_post, handle_root},
     twitter::{extract_mention_with_question, extract_vibe_emitter},
 };
 use axum::{
@@ -63,8 +61,7 @@ fn create_test_app(pool: Option<PgPool>) -> Router {
     let base_router = Router::new()
         .route("/reputest", get(handle_reputest_get))
         .route("/reputest", post(handle_reputest_post))
-        .route("/health", get(handle_health))
-        .route("/tweet", post(handle_tweet));
+        .route("/health", get(handle_health));
 
     if let Some(pool) = pool {
         let stateful_router = Router::new().route("/", get(handle_root)).with_state(pool);
@@ -265,42 +262,6 @@ async fn test_health_endpoint() {
 
     assert_eq!(json_response["status"], "healthy");
     assert_eq!(json_response["service"], "reputest");
-}
-
-/// Integration test for the tweet endpoint (POST /tweet) without credentials.
-///
-/// This test verifies that the tweet endpoint properly handles the case where
-/// Twitter API access token is not available in the database or database connection fails.
-/// It expects:
-/// - The response status to be 500 Internal Server Error
-/// - The response to be valid JSON with an error status
-/// - The error message to indicate a failure to post the tweet
-///
-/// This test is important for ensuring proper error handling in production
-/// environments where database tokens might be missing or invalid.
-#[tokio::test]
-async fn test_tweet_endpoint_without_credentials() {
-    let app = create_test_app(None);
-
-    let request = Request::builder()
-        .uri("/tweet")
-        .method("POST")
-        .body(Body::empty())
-        .unwrap();
-
-    let response = app.oneshot(request).await.unwrap();
-    // Should return 500 because Twitter access token is not in database or DATABASE_URL not set
-    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
-
-    let body = response.into_body().collect().await.unwrap().to_bytes();
-    let body_str = String::from_utf8(body.to_vec()).unwrap();
-    let json_response: Value = serde_json::from_str(&body_str).unwrap();
-
-    assert_eq!(json_response["status"], "error");
-    assert!(json_response["message"]
-        .as_str()
-        .unwrap()
-        .contains("Failed to post tweet"));
 }
 
 /// Unit test for the get_server_port function.

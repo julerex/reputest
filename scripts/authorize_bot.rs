@@ -20,6 +20,19 @@ fn generate_code_verifier() -> String {
         .collect()
 }
 
+/// Generates a cryptographically secure random state parameter for CSRF protection
+fn generate_state() -> String {
+    use rand::Rng;
+    const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    let mut rng = rand::thread_rng();
+    (0..32)
+        .map(|_| {
+            let idx = rng.gen_range(0..CHARSET.len());
+            CHARSET[idx] as char
+        })
+        .collect()
+}
+
 /// Generates code challenge from code verifier using SHA256
 fn generate_code_challenge(code_verifier: &str) -> String {
     use base64::Engine;
@@ -32,21 +45,22 @@ fn generate_code_challenge(code_verifier: &str) -> String {
 }
 
 /// Builds the authorization URL for Twitter OAuth 2.0
-fn build_authorization_url(client_id: &str, redirect_uri: &str, code_challenge: &str) -> String {
+fn build_authorization_url(
+    client_id: &str,
+    redirect_uri: &str,
+    code_challenge: &str,
+    state: &str,
+) -> String {
     let mut url = Url::parse("https://twitter.com/i/oauth2/authorize").unwrap();
-    let mut query_params = HashMap::new();
 
-    query_params.insert("response_type", "code");
-    query_params.insert("client_id", client_id);
-    query_params.insert("redirect_uri", redirect_uri);
-    query_params.insert("scope", "tweet.read tweet.write users.read offline.access");
-    query_params.insert("state", "state");
-    query_params.insert("code_challenge", code_challenge);
-    query_params.insert("code_challenge_method", "S256");
-
-    for (key, value) in query_params {
-        url.query_pairs_mut().append_pair(key, value);
-    }
+    url.query_pairs_mut()
+        .append_pair("response_type", "code")
+        .append_pair("client_id", client_id)
+        .append_pair("redirect_uri", redirect_uri)
+        .append_pair("scope", "tweet.read tweet.write users.read offline.access")
+        .append_pair("state", state)
+        .append_pair("code_challenge", code_challenge)
+        .append_pair("code_challenge_method", "S256");
 
     url.to_string()
 }
@@ -133,19 +147,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     io::stdin().read_line(&mut redirect_uri)?;
     let redirect_uri = redirect_uri.trim();
 
-    // Generate PKCE parameters
+    // Generate PKCE parameters and state for CSRF protection
     let code_verifier = generate_code_verifier();
     let code_challenge = generate_code_challenge(&code_verifier);
+    let state = generate_state();
 
     // Build authorization URL
-    let auth_url = build_authorization_url(client_id, redirect_uri, &code_challenge);
+    let auth_url = build_authorization_url(client_id, redirect_uri, &code_challenge, &state);
 
     println!("\n🔗 Authorization Steps:");
     println!("1. Open this URL in your browser:");
     println!("   {}", auth_url);
     println!("\n2. Authorize the application");
-    println!("3. Copy the 'code' parameter from the callback URL");
-    println!("4. Paste it below:");
+    println!("3. After being redirected, verify the 'state' parameter in the URL matches:");
+    println!("   Expected state: {}", state);
+    println!("4. Copy the 'code' parameter from the callback URL");
+    println!("5. Paste it below:");
 
     print!("\nEnter the authorization code: ");
     io::stdout().flush()?;

@@ -32,11 +32,16 @@ use axum::{
 };
 use log::info;
 use std::net::SocketAddr;
+use std::sync::Arc;
 use tower::ServiceBuilder;
+use tower_governor::{
+    governor::GovernorConfigBuilder, key_extractor::SmartIpKeyExtractor, GovernorLayer,
+};
 use tower_http::trace::TraceLayer;
 
 mod config;
 mod cronjob;
+mod crypto;
 mod db;
 mod handlers;
 mod oauth;
@@ -44,9 +49,7 @@ mod twitter;
 
 use config::get_server_port;
 use cronjob::start_gmgv_cronjob;
-use handlers::{
-    handle_health, handle_reputest_get, handle_reputest_post, handle_root, handle_tweet,
-};
+use handlers::{handle_health, handle_reputest_get, handle_reputest_post, handle_root};
 
 /// Main entry point for the reputest web service.
 ///
@@ -60,7 +63,6 @@ use handlers::{
 /// - `GET /reputest`: Test endpoint returning "Reputesting!"
 /// - `POST /reputest`: Test endpoint returning "Reputesting!"
 /// - `GET /health`: Health check endpoint
-/// - `POST /tweet`: Twitter API integration endpoint
 ///
 /// # Middleware
 ///
@@ -97,6 +99,16 @@ use handlers::{
 async fn main() {
     // Initialize the logging system
     env_logger::init();
+
+    // Validate security configuration at startup
+    if let Err(e) = crypto::validate_encryption_config() {
+        log::error!("SECURITY ERROR: Token encryption is not properly configured: {}", e);
+        log::error!("Set TOKEN_ENCRYPTION_KEY environment variable with a 32-byte hex key.");
+        log::error!("Generate a key with: openssl rand -hex 32");
+        log::error!("Refusing to start without encryption configured.");
+        std::process::exit(1);
+    }
+    info!("Security configuration validated successfully");
 
     // Note: Tokens are now loaded directly from the database when needed
     // No need to pre-load them as environment variables
@@ -136,15 +148,41 @@ async fn main() {
         }
     });
 
+    // Configure rate limiting: 30 requests per minute per IP
+    let governor_config = Arc::new(
+        GovernorConfigBuilder::default()
+            .per_second(2) // Refill rate: 2 tokens per second
+            .burst_size(30) // Maximum burst: 30 requests
+            .key_extractor(SmartIpKeyExtractor)
+            .finish()
+            .expect("Failed to create rate limiter config"),
+    );
+
+    let governor_limiter = governor_config.limiter().clone();
+
+    // Spawn a background task to clean up rate limiter storage periodically
+    let cleanup_interval = std::time::Duration::from_secs(60);
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(cleanup_interval).await;
+            governor_limiter.retain_recent();
+        }
+    });
+
     // Build the HTTP application with all routes and middleware
     let app = Router::new()
         .route("/", get(handle_root))
         .route("/reputest", get(handle_reputest_get))
         .route("/reputest", post(handle_reputest_post))
         .route("/health", get(handle_health))
-        .route("/tweet", post(handle_tweet))
         .with_state(db_pool)
-        .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()));
+        .layer(
+            ServiceBuilder::new()
+                .layer(TraceLayer::new_for_http())
+                .layer(GovernorLayer {
+                    config: governor_config,
+                }),
+        );
 
     // Get the server port and bind address
     let port = get_server_port();

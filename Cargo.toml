@@ -46,6 +46,14 @@ url = "2.4"
 sqlx = { version = "0.8", features = ["runtime-tokio-native-tls", "postgres", "chrono", "uuid"] }
 # Regular expressions for text parsing
 regex = "1.10"
+# Rate limiting for HTTP endpoints
+tower_governor = "0.4"
+# AES-GCM encryption for token storage
+aes-gcm = "0.10"
+# Hex encoding for encrypted data
+hex = "0.4"
+# Secure random number generation
+getrandom = "0.2"
 
 [dev-dependencies]
 # Testing utilities for async code
@@ -75,8 +83,3 @@ path = "scripts/authorize_bot.rs"
 [[bin]]
 name = "refresh_token"
 path = "scripts/refresh_access_token.rs"
-
-# Binary for posting tweets
-[[bin]]
-name = "post_tweet"
-path = "scripts/post_tweet.rs"

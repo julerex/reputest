@@ -13,7 +13,7 @@ mod tweets;
 #[allow(unused_imports)]
 pub use parsing::extract_mention_with_question;
 pub use search::{search_mentions, search_tweets_with_hashtag};
-pub use tweets::{post_tweet, reply_to_tweet};
+pub use tweets::reply_to_tweet;
 
 // Crate-internal re-exports (used by tests)
 #[allow(unused_imports)]

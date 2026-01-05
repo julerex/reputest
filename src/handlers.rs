@@ -13,7 +13,6 @@ use serde_json::{json, Value};
 use sqlx::PgPool;
 
 use crate::db::get_all_good_vibes_degrees;
-use crate::twitter::post_tweet;
 
 /// Handles GET requests to the `/reputest` endpoint.
 ///
@@ -63,59 +62,6 @@ pub async fn handle_reputest_post() -> &'static str {
 /// ```
 pub async fn handle_health() -> Json<Value> {
     Json(json!({"status": "healthy", "service": "reputest"}))
-}
-
-/// Handles POST requests to the `/tweet` endpoint.
-///
-/// This endpoint posts a tweet to Twitter/X with the message "Hello world".
-/// It demonstrates the OAuth 2.0 User Context authentication and Twitter API v2 integration.
-///
-/// # Returns
-///
-/// - `Ok(Json<Value>)`: Success response with tweet details
-/// - `Err((StatusCode, Json<Value>))`: Error response with status code and error details
-///
-/// # Success Response
-///
-/// ```json
-/// {
-///   "status": "success",
-///   "message": "Tweet posted",
-///   "response": "<Twitter API response>"
-/// }
-/// ```
-///
-/// # Error Response
-///
-/// ```json
-/// {
-///   "status": "error",
-///   "message": "Failed to post tweet",
-///   "error": "<error details>"
-/// }
-/// ```
-///
-/// # Requirements
-///
-/// Requires Twitter API access token to be set in environment variables.
-pub async fn handle_tweet() -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    match post_tweet("Hello world").await {
-        Ok(response) => {
-            info!("Tweet posted successfully");
-            Ok(Json(
-                json!({"status": "success", "message": "Tweet posted", "response": response}),
-            ))
-        }
-        Err(e) => {
-            error!("Failed to post tweet: {}", e);
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(
-                    json!({"status": "error", "message": "Failed to post tweet", "error": e.to_string()}),
-                ),
-            ))
-        }
-    }
 }
 
 /// Handles GET requests to the root `/` endpoint.

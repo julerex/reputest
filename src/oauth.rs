@@ -37,40 +37,8 @@ use std::collections::HashMap;
 /// assert_eq!(header, "Bearer your_access_token");
 /// ```
 pub fn build_oauth2_user_context_header(access_token: &str) -> String {
-    // Log token information for debugging (masked for security)
-    let token_length = access_token.len();
-    let token_prefix = if token_length > 8 {
-        &access_token[..8]
-    } else {
-        access_token
-    };
-    let token_suffix = if token_length > 16 {
-        &access_token[token_length - 8..]
-    } else if token_length > 8 {
-        &access_token[8..]
-    } else {
-        ""
-    };
-
-    let masked_token = if token_length > 16 {
-        format!("{}...{}", token_prefix, token_suffix)
-    } else {
-        format!("{}...", token_prefix)
-    };
-
-    debug!(
-        "Building OAuth 2.0 User Context header with token length: {}",
-        token_length
-    );
-    debug!("OAuth token (masked): {}", masked_token);
-
-    let header = format!("Bearer {}", access_token);
-    debug!(
-        "Generated Authorization header: Bearer {}...",
-        &header[7..std::cmp::min(header.len(), 20)]
-    );
-
-    header
+    debug!("Building OAuth 2.0 User Context header");
+    format!("Bearer {}", access_token)
 }
 
 /// Refreshes an OAuth 2.0 User Context access token using a refresh token.
@@ -120,38 +88,6 @@ pub async fn refresh_access_token(
 ) -> Result<(String, Option<String>), Box<dyn std::error::Error + Send + Sync>> {
     debug!("Starting OAuth 2.0 access token refresh process");
 
-    // Log token info (masked for security)
-    let refresh_token_length = refresh_token.len();
-    let refresh_token_prefix = if refresh_token_length > 8 {
-        &refresh_token[..8]
-    } else {
-        refresh_token
-    };
-    let refresh_token_suffix = if refresh_token_length > 16 {
-        &refresh_token[refresh_token_length - 8..]
-    } else if refresh_token_length > 8 {
-        &refresh_token[8..]
-    } else {
-        ""
-    };
-
-    let masked_refresh_token = if refresh_token_length > 16 {
-        format!("{}...{}", refresh_token_prefix, refresh_token_suffix)
-    } else {
-        format!("{}...", refresh_token_prefix)
-    };
-
-    debug!("Refresh token length: {}", refresh_token_length);
-    debug!("Refresh token (masked): {}", masked_refresh_token);
-    debug!(
-        "Client ID (masked): {}...",
-        &client_id[..std::cmp::min(client_id.len(), 8)]
-    );
-    debug!(
-        "Client secret (masked): {}...",
-        &client_secret[..std::cmp::min(client_secret.len(), 8)]
-    );
-
     let client = reqwest::Client::new();
     let url = "https://api.twitter.com/2/oauth2/token";
 
@@ -176,76 +112,21 @@ pub async fn refresh_access_token(
     if status.is_success() {
         let response_text = response.text().await?;
         debug!("Token refresh successful");
-        debug!("Token refresh response body: {}", response_text);
 
         // Parse the JSON response to extract access_token
         let json: serde_json::Value = serde_json::from_str(&response_text)?;
 
         if let Some(access_token) = json.get("access_token").and_then(|v| v.as_str()) {
-            let new_token_length = access_token.len();
-            let new_token_prefix = if new_token_length > 8 {
-                &access_token[..8]
-            } else {
-                access_token
-            };
-            let new_token_suffix = if new_token_length > 16 {
-                &access_token[new_token_length - 8..]
-            } else if new_token_length > 8 {
-                &access_token[8..]
-            } else {
-                ""
-            };
-
-            let masked_new_token = if new_token_length > 16 {
-                format!("{}...{}", new_token_prefix, new_token_suffix)
-            } else {
-                format!("{}...", new_token_prefix)
-            };
-
-            debug!(
-                "New access token obtained with length: {}",
-                new_token_length
-            );
-            debug!("New access token (masked): {}", masked_new_token);
+            debug!("New access token obtained successfully");
 
             // Check if we also got a new refresh token
-            let new_refresh_token = if let Some(new_refresh_token) =
-                json.get("refresh_token").and_then(|v| v.as_str())
-            {
-                let new_refresh_length = new_refresh_token.len();
-                let new_refresh_prefix = if new_refresh_length > 8 {
-                    &new_refresh_token[..8]
-                } else {
-                    new_refresh_token
-                };
-                let new_refresh_suffix = if new_refresh_length > 16 {
-                    &new_refresh_token[new_refresh_length - 8..]
-                } else if new_refresh_length > 8 {
-                    &new_refresh_token[8..]
-                } else {
-                    ""
-                };
+            let new_refresh_token = json.get("refresh_token").and_then(|v| v.as_str()).map(|s| {
+                debug!("New refresh token also received");
+                s.to_string()
+            });
 
-                let masked_new_refresh = if new_refresh_length > 16 {
-                    format!("{}...{}", new_refresh_prefix, new_refresh_suffix)
-                } else {
-                    format!("{}...", new_refresh_prefix)
-                };
-
-                debug!(
-                    "New refresh token also provided with length: {}",
-                    new_refresh_length
-                );
-                debug!("New refresh token (masked): {}", masked_new_refresh);
-                debug!("New refresh token received - it will be saved to the database");
-                Some(new_refresh_token.to_string())
-            } else {
-                None
-            };
-
-            // Check token expiration
+            // Log token expiration info (safe - no sensitive data)
             if let Some(expires_in) = json.get("expires_in").and_then(|v| v.as_u64()) {
-                debug!("New access token expires in {} seconds", expires_in);
                 let hours = expires_in / 3600;
                 let minutes = (expires_in % 3600) / 60;
                 if hours > 0 {
@@ -264,11 +145,8 @@ pub async fn refresh_access_token(
             Err("No access_token in refresh response".into())
         }
     } else {
-        let error_text = response.text().await?;
-        error!(
-            "Token refresh failed with status {}: {}",
-            status, error_text
-        );
-        Err(format!("Token refresh failed ({}): {}", status, error_text).into())
+        // Don't log the full error response as it might contain sensitive info
+        error!("Token refresh failed with status {}", status);
+        Err(format!("Token refresh failed with status {}", status).into())
     }
 }

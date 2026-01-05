@@ -10,6 +10,18 @@ use sqlx::PgPool;
 use crate::config::TwitterConfig;
 use crate::oauth::build_oauth2_user_context_header;
 
+/// Sanitizes API response text for safe logging.
+///
+/// This function truncates long responses to prevent accidental exposure
+/// of sensitive data in logs.
+fn sanitize_response_for_logging(response: &str, max_len: usize) -> String {
+    if response.len() > max_len {
+        format!("{}... [truncated, {} total bytes]", &response[..max_len], response.len())
+    } else {
+        response.to_string()
+    }
+}
+
 /// Makes an authenticated request to the Twitter API with automatic token refresh on 401 errors.
 ///
 /// This helper function handles the common pattern of making authenticated requests to the Twitter API
@@ -53,7 +65,11 @@ pub(crate) async fn make_authenticated_request(
     if status.is_success() {
         let response_text = response.text().await?;
         info!("Operation '{}' completed successfully", operation_name);
-        debug!("Response body for '{}': {}", operation_name, response_text);
+        debug!(
+            "Response summary for '{}': {} bytes received",
+            operation_name,
+            response_text.len()
+        );
         return Ok(response_text);
     }
 
@@ -99,19 +115,25 @@ pub(crate) async fn make_authenticated_request(
                             operation_name
                         );
                         debug!(
-                            "Response body for '{}' (after refresh): {}",
-                            operation_name, response_text
+                            "Response summary for '{}' (after refresh): {} bytes received",
+                            operation_name,
+                            response_text.len()
                         );
                         return Ok(response_text);
                     } else {
                         let error_text = retry_response.text().await?;
                         error!(
-                            "Operation '{}' failed after token refresh - Status: {}, Response: {}",
-                            operation_name, retry_status, error_text
+                            "Operation '{}' failed after token refresh - Status: {}",
+                            operation_name, retry_status
+                        );
+                        debug!(
+                            "Error response for '{}': {}",
+                            operation_name,
+                            sanitize_response_for_logging(&error_text, 200)
                         );
                         return Err(format!(
-                            "Twitter API error after token refresh ({}): {}",
-                            retry_status, error_text
+                            "Twitter API error after token refresh ({})",
+                            retry_status
                         )
                         .into());
                     }
@@ -145,12 +167,17 @@ pub(crate) async fn make_authenticated_request(
     // Handle other error status codes
     let error_text = response.text().await?;
     error!(
-        "Operation '{}' failed - Status: {}, Response: {}",
-        operation_name, status, error_text
+        "Operation '{}' failed - Status: {}",
+        operation_name, status
+    );
+    debug!(
+        "Error response for '{}': {}",
+        operation_name,
+        sanitize_response_for_logging(&error_text, 200)
     );
     Err(format!(
-        "Twitter API error for operation '{}' ({}): {}",
-        operation_name, status, error_text
+        "Twitter API error for operation '{}' ({})",
+        operation_name, status
     )
     .into())
 }

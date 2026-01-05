@@ -102,33 +102,7 @@ impl TwitterConfig {
         // Load required access token from database
         let access_token = match db::get_latest_access_token(pool).await {
             Ok(Some(token)) => {
-                let token_length = token.len();
-                info!(
-                    "Found access token in database with length: {}",
-                    token_length
-                );
-
-                // Log token info (masked for security)
-                let token_prefix = if token_length > 8 {
-                    &token[..8]
-                } else {
-                    &token
-                };
-                let token_suffix = if token_length > 16 {
-                    &token[token_length - 8..]
-                } else if token_length > 8 {
-                    &token[8..]
-                } else {
-                    ""
-                };
-
-                let masked_token = if token_length > 16 {
-                    format!("{}...{}", token_prefix, token_suffix)
-                } else {
-                    format!("{}...", token_prefix)
-                };
-
-                debug!("Access token (masked): {}", masked_token);
+                info!("Access token loaded from database successfully");
 
                 // Validate token format (basic checks)
                 if token.is_empty() {
@@ -136,11 +110,8 @@ impl TwitterConfig {
                     return Err("Access token cannot be empty".into());
                 }
 
-                if token_length < 10 {
-                    warn!(
-                        "Access token seems unusually short ({} characters)",
-                        token_length
-                    );
+                if token.len() < 10 {
+                    warn!("Access token seems unusually short");
                 }
 
                 token
@@ -149,9 +120,9 @@ impl TwitterConfig {
                 error!("No access token found in database");
                 return Err("No access token found in database".into());
             }
-            Err(e) => {
-                error!("Failed to load access token from database: {}", e);
-                return Err(format!("Failed to load access token from database: {}", e).into());
+            Err(_) => {
+                error!("Failed to load access token from database");
+                return Err("Failed to load access token from database".into());
             }
         };
 
@@ -174,11 +145,7 @@ impl TwitterConfig {
         // Load optional client credentials
         let client_id = match env::var("XAPI_CLIENT_ID") {
             Ok(id) => {
-                debug!("Found XAPI_CLIENT_ID environment variable");
-                debug!(
-                    "Client ID (masked): {}...",
-                    &id[..std::cmp::min(id.len(), 8)]
-                );
+                debug!("XAPI_CLIENT_ID loaded from environment");
                 Some(id)
             }
             Err(_) => {
@@ -189,11 +156,7 @@ impl TwitterConfig {
 
         let client_secret = match env::var("XAPI_CLIENT_SECRET") {
             Ok(secret) => {
-                debug!("Found XAPI_CLIENT_SECRET environment variable");
-                debug!(
-                    "Client secret (masked): {}...",
-                    &secret[..std::cmp::min(secret.len(), 8)]
-                );
+                debug!("XAPI_CLIENT_SECRET loaded from environment");
                 Some(secret)
             }
             Err(_) => {
@@ -295,13 +258,14 @@ impl TwitterConfig {
                 debug!("Access token refreshed successfully");
 
                 // Update the access token in the config
-                let old_token_length = self.access_token.len();
                 self.access_token = new_access_token.clone();
-                let new_token_length = self.access_token.len();
 
                 // Save new access token to database
-                if let Err(e) = db::save_access_token(pool, &new_access_token).await {
-                    warn!("Failed to save access token to database: {}", e);
+                if db::save_access_token(pool, &new_access_token)
+                    .await
+                    .is_err()
+                {
+                    warn!("Failed to save access token to database");
                     warn!("Access token updated in memory only");
                 } else {
                     debug!("Access token successfully saved to database");
@@ -313,40 +277,18 @@ impl TwitterConfig {
                     self.refresh_token = Some(new_refresh.clone());
 
                     // Try to save to database
-                    if let Err(e) = Self::save_refresh_token_to_db(pool, &new_refresh).await {
-                        warn!("Failed to save refresh token to database: {}", e);
+                    if Self::save_refresh_token_to_db(pool, &new_refresh)
+                        .await
+                        .is_err()
+                    {
+                        warn!("Failed to save refresh token to database");
                         warn!("Refresh token updated in memory only");
                     } else {
                         debug!("Refresh token successfully saved to database");
                     }
                 }
 
-                debug!(
-                    "Access token updated: old length {}, new length {}",
-                    old_token_length, new_token_length
-                );
-
-                // Log the updated token info (masked)
-                let token_prefix = if new_token_length > 8 {
-                    &self.access_token[..8]
-                } else {
-                    &self.access_token
-                };
-                let token_suffix = if new_token_length > 16 {
-                    &self.access_token[new_token_length - 8..]
-                } else if new_token_length > 8 {
-                    &self.access_token[8..]
-                } else {
-                    ""
-                };
-
-                let masked_token = if new_token_length > 16 {
-                    format!("{}...{}", token_prefix, token_suffix)
-                } else {
-                    format!("{}...", token_prefix)
-                };
-
-                debug!("Updated access token (masked): {}", masked_token);
+                debug!("Access token updated successfully");
 
                 Ok(())
             }

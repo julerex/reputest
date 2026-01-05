@@ -9,6 +9,8 @@ use sqlx::{PgPool, Row};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::env;
 
+use crate::crypto::{decrypt_token, encrypt_token, is_encryption_configured};
+
 /// Establishes a connection to the PostgreSQL database using DATABASE_URL.
 ///
 /// # Returns
@@ -20,10 +22,6 @@ pub async fn get_db_pool() -> Result<PgPool, Box<dyn std::error::Error + Send + 
         env::var("DATABASE_URL").map_err(|_| "DATABASE_URL environment variable is not set")?;
 
     debug!("Connecting to PostgreSQL database");
-    debug!(
-        "Database URL (masked): {}...",
-        &database_url[..std::cmp::min(database_url.len(), 20)]
-    );
 
     let pool = PgPool::connect(&database_url).await?;
     debug!("Successfully connected to PostgreSQL database");
@@ -62,21 +60,17 @@ pub async fn get_latest_refresh_token(
 
     match row {
         Some(row) => {
-            let token: String = row.get("token");
+            let stored_token: String = row.get("token");
             let created_at: chrono::DateTime<chrono::Utc> = row.get("created_at");
 
-            let token_length = token.len();
-            let masked_token = if token_length > 16 {
-                format!("{}...{}", &token[..8], &token[token_length - 8..])
-            } else {
-                format!("{}...", &token[..8])
-            };
+            info!("Found refresh token created at {}", created_at);
 
-            info!(
-                "Found refresh token created at {} (masked: {})",
-                created_at, masked_token
-            );
-            debug!("Refresh token length: {}", token_length);
+            // Decrypt if encryption is configured
+            let token = if is_encryption_configured() {
+                decrypt_token(&stored_token)?
+            } else {
+                stored_token
+            };
 
             Ok(Some(token))
         }
@@ -90,8 +84,8 @@ pub async fn get_latest_refresh_token(
 /// Stores a new refresh token in the database.
 ///
 /// This function inserts a new refresh token into the refresh_tokens table
-/// with the current timestamp. The old tokens remain in the table for historical
-/// purposes, but only the latest one will be retrieved.
+/// with the current timestamp. Old tokens are automatically deleted to prevent
+/// accumulation of stale credentials.
 ///
 /// # Parameters
 ///
@@ -101,22 +95,38 @@ pub async fn get_latest_refresh_token(
 /// # Returns
 ///
 /// - `Ok(())`: If the token was successfully stored
-/// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the insert fails
+/// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the insert fails or encryption is not configured
+///
+/// # Security
+///
+/// This function requires TOKEN_ENCRYPTION_KEY to be configured. Tokens are always
+/// encrypted before storage to protect against database breaches.
 pub async fn save_refresh_token(
     pool: &PgPool,
     token: &str,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     info!("Storing new refresh token in database");
 
-    let token_length = token.len();
-    let masked_token = if token_length > 16 {
-        format!("{}...{}", &token[..8], &token[token_length - 8..])
-    } else {
-        format!("{}...", &token[..8])
-    };
+    // Encryption is mandatory - fail if not configured
+    if !is_encryption_configured() {
+        return Err("TOKEN_ENCRYPTION_KEY must be set - refusing to store tokens in plaintext".into());
+    }
 
-    debug!("Refresh token length: {}", token_length);
-    debug!("Refresh token (masked): {}", masked_token);
+    let token_to_store = encrypt_token(token)?;
+
+    // Delete old tokens before inserting new one to prevent accumulation
+    let deleted = sqlx::query(
+        r#"
+        DELETE FROM refresh_tokens
+        WHERE created_at < NOW() - INTERVAL '24 hours'
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    if deleted.rows_affected() > 0 {
+        info!("Cleaned up {} old refresh token(s)", deleted.rows_affected());
+    }
 
     sqlx::query(
         r#"
@@ -124,7 +134,7 @@ pub async fn save_refresh_token(
         VALUES ($1, NOW())
         "#,
     )
-    .bind(token)
+    .bind(&token_to_store)
     .execute(pool)
     .await?;
 
@@ -163,21 +173,17 @@ pub async fn get_latest_access_token(
 
     match row {
         Some(row) => {
-            let token: String = row.get("token");
+            let stored_token: String = row.get("token");
             let created_at: chrono::DateTime<chrono::Utc> = row.get("created_at");
 
-            let token_length = token.len();
-            let masked_token = if token_length > 16 {
-                format!("{}...{}", &token[..8], &token[token_length - 8..])
-            } else {
-                format!("{}...", &token[..8])
-            };
+            info!("Found access token created at {}", created_at);
 
-            info!(
-                "Found access token created at {} (masked: {})",
-                created_at, masked_token
-            );
-            debug!("Access token length: {}", token_length);
+            // Decrypt if encryption is configured
+            let token = if is_encryption_configured() {
+                decrypt_token(&stored_token)?
+            } else {
+                stored_token
+            };
 
             Ok(Some(token))
         }
@@ -191,8 +197,8 @@ pub async fn get_latest_access_token(
 /// Stores a new access token in the database.
 ///
 /// This function inserts a new access token into the access_tokens table
-/// with the current timestamp. The old tokens remain in the table for historical
-/// purposes, but only the latest one will be retrieved.
+/// with the current timestamp. Old tokens are automatically deleted to prevent
+/// accumulation of stale credentials.
 ///
 /// # Parameters
 ///
@@ -202,22 +208,38 @@ pub async fn get_latest_access_token(
 /// # Returns
 ///
 /// - `Ok(())`: If the token was successfully stored
-/// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the insert fails
+/// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the insert fails or encryption is not configured
+///
+/// # Security
+///
+/// This function requires TOKEN_ENCRYPTION_KEY to be configured. Tokens are always
+/// encrypted before storage to protect against database breaches.
 pub async fn save_access_token(
     pool: &PgPool,
     token: &str,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     debug!("Storing new access token in database");
 
-    let token_length = token.len();
-    let masked_token = if token_length > 16 {
-        format!("{}...{}", &token[..8], &token[token_length - 8..])
-    } else {
-        format!("{}...", &token[..8])
-    };
+    // Encryption is mandatory - fail if not configured
+    if !is_encryption_configured() {
+        return Err("TOKEN_ENCRYPTION_KEY must be set - refusing to store tokens in plaintext".into());
+    }
 
-    debug!("Access token length: {}", token_length);
-    debug!("Access token (masked): {}", masked_token);
+    let token_to_store = encrypt_token(token)?;
+
+    // Delete old tokens before inserting new one to prevent accumulation
+    let deleted = sqlx::query(
+        r#"
+        DELETE FROM access_tokens
+        WHERE created_at < NOW() - INTERVAL '24 hours'
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    if deleted.rows_affected() > 0 {
+        debug!("Cleaned up {} old access token(s)", deleted.rows_affected());
+    }
 
     sqlx::query(
         r#"
@@ -225,7 +247,7 @@ pub async fn save_access_token(
         VALUES ($1, NOW())
         "#,
     )
-    .bind(token)
+    .bind(&token_to_store)
     .execute(pool)
     .await?;
 
