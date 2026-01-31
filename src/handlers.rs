@@ -283,19 +283,21 @@ pub async fn handle_login_start(
 
     let auth_url = build_authorization_url(client_id, &redirect_uri, &code_challenge, &oauth_state);
 
-    // Set cookies: 10 min max-age, Path=/, HttpOnly, SameSite=Lax
-    let secure_attr = if base_url.starts_with("https://") {
-        "; Secure"
+    // Set cookies: 10 min max-age, Path=/, HttpOnly.
+    // SameSite=None; Secure so cookies are sent when Twitter redirects back (cross-site).
+    // SameSite=Lax can drop cookies on redirect in Safari and some other browsers.
+    let cookie_attrs = if base_url.starts_with("https://") {
+        "SameSite=None; Secure; Max-Age=600"
     } else {
-        ""
+        "SameSite=Lax; Max-Age=600"
     };
     let state_cookie = format!(
-        "oauth_state={}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600{}",
-        oauth_state, secure_attr
+        "oauth_state={}; Path=/; HttpOnly; {}",
+        oauth_state, cookie_attrs
     );
     let verifier_cookie = format!(
-        "oauth_code_verifier={}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600{}",
-        code_verifier, secure_attr
+        "oauth_code_verifier={}; Path=/; HttpOnly; {}",
+        code_verifier, cookie_attrs
     );
 
     Ok((
