@@ -54,6 +54,10 @@ aes-gcm = "0.10"
 hex = "0.4"
 # Secure random number generation
 getrandom = "0.2"
+# Cookie parsing and building for session/OAuth
+cookie = "0.18"
+# Form parsing for playground POST
+serde_urlencoded = "0.7"
 
 [dev-dependencies]
 # Testing utilities for async code

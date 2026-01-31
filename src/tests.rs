@@ -26,14 +26,17 @@ use crate::{
         get_db_pool, get_vibe_score_one, get_vibe_score_three, get_vibe_score_two, save_good_vibes,
         save_user,
     },
-    handlers::{handle_health, handle_reputest_get, handle_reputest_post, handle_root},
+    handlers::{
+        handle_health, handle_reputest_get, handle_reputest_post, handle_root, AppState,
+        OAuthCallbackQuery,
+    },
     twitter::{extract_mention_with_question, extract_vibe_emitter},
 };
 use axum::{
     body::Body,
     extract::State,
     http::{Request, StatusCode},
-    response::{Html, Json},
+    response::{Html, IntoResponse, Json},
     routing::{get, post},
     Router,
 };
@@ -51,24 +54,25 @@ use tower::ServiceExt;
 ///
 /// # Parameters
 ///
-/// - `pool`: Optional database pool. If provided, the root route will be included.
-///   If None, the root route is omitted since it requires database access.
+/// - `pool`: Database pool. All routes (including /reputest, /health) require AppState with pool.
 ///
 /// # Returns
 ///
 /// An Axum `Router` instance configured with application routes.
-fn create_test_app(pool: Option<PgPool>) -> Router {
-    let base_router = Router::new()
+fn create_test_app(pool: PgPool) -> Router<AppState> {
+    let app_state = AppState {
+        pool: pool.clone(),
+        base_url: None,
+        oauth_client_id: None,
+        oauth_client_secret: None,
+    };
+
+    Router::new()
+        .route("/", get(handle_root))
         .route("/reputest", get(handle_reputest_get))
         .route("/reputest", post(handle_reputest_post))
-        .route("/health", get(handle_health));
-
-    if let Some(pool) = pool {
-        let stateful_router = Router::new().route("/", get(handle_root)).with_state(pool);
-        base_router.merge(stateful_router)
-    } else {
-        base_router
-    }
+        .route("/health", get(handle_health))
+        .with_state(app_state)
 }
 
 /// Tests the root endpoint handler function directly.
@@ -91,7 +95,13 @@ async fn test_handle_root() {
         }
     };
 
-    let response = handle_root(State(pool)).await;
+    let app_state = AppState {
+        pool: pool.clone(),
+        base_url: None,
+        oauth_client_id: None,
+        oauth_client_secret: None,
+    };
+    let response = handle_root(State(app_state)).await;
     match response {
         Ok(Html(html)) => {
             // Verify it's HTML and contains the expected table structure
@@ -114,11 +124,46 @@ async fn test_handle_root() {
 /// Tests the GET /reputest endpoint handler function directly.
 ///
 /// This test verifies that the `handle_reputest_get` function returns the
-/// expected "Reputesting!" message without making an HTTP request.
+/// expected "Reputesting!" message when called without OAuth callback params.
 #[tokio::test]
 async fn test_handle_reputest_get() {
-    let response = handle_reputest_get().await;
-    assert_eq!(response, "Reputesting!");
+    if std::env::var("DATABASE_URL").is_err() {
+        println!("Skipping test_handle_reputest_get - DATABASE_URL not set");
+        return;
+    }
+    let pool = match get_db_pool().await {
+        Ok(p) => p,
+        Err(_) => {
+            println!("Skipping test_handle_reputest_get - could not connect to database");
+            return;
+        }
+    };
+    let app_state = AppState {
+        pool,
+        base_url: None,
+        oauth_client_id: None,
+        oauth_client_secret: None,
+    };
+    let query = OAuthCallbackQuery {
+        code: None,
+        state: None,
+    };
+    let request = Request::builder()
+        .uri("/reputest")
+        .method("GET")
+        .body(Body::empty())
+        .unwrap();
+    let response = handle_reputest_get(
+        axum::extract::State(app_state),
+        axum::extract::Query(query),
+        request,
+    )
+    .await
+    .into_response();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let body_str = String::from_utf8(body.to_vec()).unwrap();
+    assert!(body_str.contains("Reputesting!"));
 }
 
 /// Tests the POST /reputest endpoint handler function directly.
@@ -165,7 +210,7 @@ async fn test_root_endpoint() {
         }
     };
 
-    let app = create_test_app(Some(pool));
+    let app = create_test_app(pool);
 
     let request = Request::builder()
         .uri("/")
@@ -198,7 +243,18 @@ async fn test_root_endpoint() {
 /// - The response body contains "Reputesting!"
 #[tokio::test]
 async fn test_reputest_get_endpoint() {
-    let app = create_test_app(None);
+    if std::env::var("DATABASE_URL").is_err() {
+        println!("Skipping test_reputest_get_endpoint - DATABASE_URL not set");
+        return;
+    }
+    let pool = match get_db_pool().await {
+        Ok(p) => p,
+        Err(_) => {
+            println!("Skipping test_reputest_get_endpoint - could not connect to database");
+            return;
+        }
+    };
+    let app = create_test_app(pool);
 
     let request = Request::builder()
         .uri("/reputest")
@@ -221,7 +277,18 @@ async fn test_reputest_get_endpoint() {
 /// - The response body contains "Reputesting!"
 #[tokio::test]
 async fn test_reputest_post_endpoint() {
-    let app = create_test_app(None);
+    if std::env::var("DATABASE_URL").is_err() {
+        println!("Skipping test_reputest_post_endpoint - DATABASE_URL not set");
+        return;
+    }
+    let pool = match get_db_pool().await {
+        Ok(p) => p,
+        Err(_) => {
+            println!("Skipping test_reputest_post_endpoint - could not connect to database");
+            return;
+        }
+    };
+    let app = create_test_app(pool);
 
     let request = Request::builder()
         .uri("/reputest")
@@ -245,7 +312,18 @@ async fn test_reputest_post_endpoint() {
 /// - The JSON contains the expected status and service fields
 #[tokio::test]
 async fn test_health_endpoint() {
-    let app = create_test_app(None);
+    if std::env::var("DATABASE_URL").is_err() {
+        println!("Skipping test_health_endpoint - DATABASE_URL not set");
+        return;
+    }
+    let pool = match get_db_pool().await {
+        Ok(p) => p,
+        Err(_) => {
+            println!("Skipping test_health_endpoint - could not connect to database");
+            return;
+        }
+    };
+    let app = create_test_app(pool);
 
     let request = Request::builder()
         .uri("/health")

@@ -260,6 +260,124 @@ pub async fn save_access_token(
     Ok(())
 }
 
+/// Data for a web login session (decrypted tokens).
+#[derive(Clone, Debug)]
+pub struct WebSession {
+    pub id: sqlx::types::Uuid,
+    pub user_id: String,
+    pub username: String,
+    pub access_token: String,
+    pub refresh_token: Option<String>,
+}
+
+/// Creates a new web session and returns its ID.
+pub async fn create_session(
+    pool: &PgPool,
+    user_id: &str,
+    username: &str,
+    access_token: &str,
+    refresh_token: Option<&str>,
+    expires_at: chrono::DateTime<chrono::Utc>,
+) -> Result<sqlx::types::Uuid, Box<dyn std::error::Error + Send + Sync>> {
+    if !is_encryption_configured() {
+        return Err(
+            "TOKEN_ENCRYPTION_KEY must be set - refusing to store session tokens in plaintext"
+                .into(),
+        );
+    }
+
+    let id = sqlx::types::Uuid::new_v4();
+    let access_enc = encrypt_token(access_token)?;
+    let refresh_enc: Option<String> = refresh_token
+        .map(encrypt_token)
+        .transpose()?;
+
+    sqlx::query(
+        r#"
+        INSERT INTO sessions (id, user_id, username, access_token, refresh_token, expires_at)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        "#,
+    )
+    .bind(id)
+    .bind(user_id)
+    .bind(username)
+    .bind(&access_enc)
+    .bind(refresh_enc.as_deref())
+    .bind(expires_at)
+    .execute(pool)
+    .await?;
+
+    debug!("Created web session {} for user {}", id, username);
+    Ok(id)
+}
+
+/// Retrieves a session by ID if it exists and is not expired. Tokens are decrypted.
+pub async fn get_session_by_id(
+    pool: &PgPool,
+    id: sqlx::types::Uuid,
+) -> Result<Option<WebSession>, Box<dyn std::error::Error + Send + Sync>> {
+    if !is_encryption_configured() {
+        return Err("TOKEN_ENCRYPTION_KEY is required to read session tokens".into());
+    }
+
+    let row = sqlx::query(
+        r#"
+        SELECT id, user_id, username, access_token, refresh_token
+        FROM sessions
+        WHERE id = $1 AND expires_at > NOW()
+        "#,
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await?;
+
+    match row {
+        Some(row) => {
+            let access_token = decrypt_token(&row.get::<String, _>("access_token"))?;
+            let refresh_token = row
+                .get::<Option<String>, _>("refresh_token")
+                .filter(|s| !s.is_empty())
+                .map(|s| decrypt_token(&s))
+                .transpose()?;
+            Ok(Some(WebSession {
+                id: row.get("id"),
+                user_id: row.get("user_id"),
+                username: row.get("username"),
+                access_token,
+                refresh_token,
+            }))
+        }
+        None => Ok(None),
+    }
+}
+
+/// Deletes a session by ID (e.g. on logout).
+pub async fn delete_session(
+    pool: &PgPool,
+    id: sqlx::types::Uuid,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    sqlx::query("DELETE FROM sessions WHERE id = $1")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    debug!("Deleted session {}", id);
+    Ok(())
+}
+
+/// Deletes expired sessions (optional cleanup).
+pub async fn delete_expired_sessions(
+    pool: &PgPool,
+) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
+    let result = sqlx::query("DELETE FROM sessions WHERE expires_at <= NOW()")
+        .execute(pool)
+        .await?;
+    let n = result.rows_affected();
+    if n > 0 {
+        debug!("Deleted {} expired session(s)", n);
+    }
+    Ok(n)
+}
+
 /// Stores good vibes data in the database.
 ///
 /// This function inserts information about good vibes between users into the

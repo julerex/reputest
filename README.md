@@ -138,6 +138,12 @@ Visit `http://localhost:3000` to see the Good Vibes dashboard.
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/` | Good Vibes dashboard — displays all relationships with degree paths |
+| `GET` | `/login` | Login page — "Login with X" to start OAuth 2.0 web flow |
+| `GET` | `/login/start` | Starts OAuth flow (redirects to X) |
+| `GET` | `/oauth/callback` | OAuth callback — exchanges code for session |
+| `GET` | `/playground` | X API playground — type API path, see response (requires login) |
+| `POST` | `/playground` | Submit X API request from playground |
+| `GET` | `/logout` | Log out and clear session |
 | `GET` | `/reputest` | Test endpoint — returns `"Reputesting!"` |
 | `POST` | `/reputest` | Test endpoint — returns `"Reputesting!"` |
 | `GET` | `/health` | Health check — returns `{"status": "healthy", "service": "reputest"}` |
@@ -150,6 +156,15 @@ The homepage displays a comprehensive table showing all sensor-emitter pairs wit
 |--------|-------------|---------|--------------|----|----|----|----|
 | @alice | Alice Smith | @bob | Bob Jones | 1 | 0 | 0 | 0 |
 | @alice | Alice Smith | @charlie | Charlie Brown | 0 | 2 | 5 | 8 |
+
+### Web Login and API Playground
+
+To use the X API playground with your own account:
+
+1. Set `BASE_URL` (e.g. `http://localhost:3000`) and ensure `XAPI_CLIENT_ID` and `XAPI_CLIENT_SECRET` are set.
+2. In the [X Developer Portal](https://developer.twitter.com/), set the Callback URI to **`https://reputest.fly.dev/reputest`** (hardcoded).
+3. Visit `/login`, click "Login with X", authorize, then use `/playground` to call X API v2 paths (e.g. `2/users/me`) and see the response.
+4. Optional: set `ALLOWED_USERNAME=julian_le_roux` to restrict login to that account only.
 
 ## ⚙️ Configuration
 

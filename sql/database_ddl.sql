@@ -22,6 +22,30 @@ COMMENT ON COLUMN access_tokens.id IS 'Auto-incrementing primary key';
 COMMENT ON COLUMN access_tokens.token IS 'The OAuth 2.0 access token value';
 COMMENT ON COLUMN access_tokens.created_at IS 'Timestamp when the access token was created';
 
+-- Web login sessions (OAuth 2.0 user context per session)
+CREATE TABLE sessions (
+    id            UUID                     PRIMARY KEY,
+    user_id       TEXT                     NOT NULL,
+    username      TEXT                     NOT NULL,
+    access_token  TEXT                     NOT NULL,
+    refresh_token TEXT,
+    created_at    TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    expires_at    TIMESTAMP WITH TIME ZONE NOT NULL
+);
+
+COMMENT ON TABLE sessions IS 'Web login sessions: per-user OAuth 2.0 tokens (encrypted)';
+COMMENT ON COLUMN sessions.id IS 'Session ID (UUID), stored in cookie';
+COMMENT ON COLUMN sessions.user_id IS 'X/Twitter user ID';
+COMMENT ON COLUMN sessions.username IS 'X/Twitter username';
+COMMENT ON COLUMN sessions.access_token IS 'Encrypted OAuth 2.0 access token';
+COMMENT ON COLUMN sessions.refresh_token IS 'Encrypted OAuth 2.0 refresh token (optional)';
+COMMENT ON COLUMN sessions.created_at IS 'When the session was created';
+COMMENT ON COLUMN sessions.expires_at IS 'When the session expires';
+
+CREATE INDEX idx_sessions_expires_at ON sessions(expires_at);
+
+COMMENT ON INDEX idx_sessions_expires_at IS 'Speed up cleanup of expired sessions';
+
 -- Twitter users who have given or received good vibes
 CREATE TABLE users (
     id         TEXT                      PRIMARY KEY,  -- Twitter user ID (used as primary key)

@@ -8,6 +8,9 @@ CONTAINER_RUST_LOG ?= info
 CONTAINER_CPU ?= 0.5
 CONTAINER_MEMORY ?= 0.5
 FLY_DB_CLUSTER_ID ?= your-cluster-id
+FLY_DB_NAME ?= reputest
+# Port for fly proxy when running pg_dump (avoid clashing with local postgres)
+FLY_DB_PROXY_PORT ?= 15432
 
 -include config.env
 
@@ -154,6 +157,51 @@ fly-db-schema: ## Show database schema
 	@echo
 	@echo "=== MATERIALIZED VIEWS ==="
 	@echo "SELECT matviewname FROM pg_matviews WHERE schemaname = 'public' ORDER BY matviewname;" | fly mpg connect $(FLY_DB_CLUSTER_ID) -d reputest -u fly-user
+
+# Compare prod schema (same queries as fly-db-schema) with sql/database_ddl.sql.
+# Uses one UNION query to get type+name, parses psql output, extracts DDL object names, then diffs.
+.PHONY: fly-db-schema-diff
+fly-db-schema-diff: ## Diff prod schema object names vs sql/database_ddl.sql (tables, indexes, views)
+	@rm -f .schema_prod.txt .schema_ddl.txt .schema_prod_sorted.txt .schema_ddl_sorted.txt
+	@echo "SELECT 'TABLE' AS typ, tablename AS n FROM pg_tables WHERE schemaname = 'public' UNION ALL SELECT 'INDEX', indexname FROM pg_indexes WHERE schemaname = 'public' UNION ALL SELECT 'VIEW', viewname FROM pg_views WHERE schemaname = 'public' UNION ALL SELECT 'MATVIEW', matviewname FROM pg_matviews WHERE schemaname = 'public' ORDER BY typ, n;" \
+		| fly mpg connect $(FLY_DB_CLUSTER_ID) -d reputest -u fly-user 2>/dev/null \
+		| tail -n +3 | grep '|' \
+		| awk -F'|' '{gsub(/^[ \t]+|[ \t]+$$/,"",$$1); gsub(/^[ \t]+|[ \t]+$$/,"",$$2); if ($$1!="" && $$2!="") print $$1 " " $$2}' \
+		> .schema_prod.txt
+	@grep -E 'CREATE (TABLE|INDEX|VIEW) ' sql/database_ddl.sql \
+		| sed -n 's/.*CREATE \(TABLE\|INDEX\|VIEW\) \+\([a-zA-Z0-9_]*\).*/\1 \2/p' | sort -u > .schema_ddl.txt
+	@sort .schema_prod.txt > .schema_prod_sorted.txt && sort .schema_ddl.txt > .schema_ddl_sorted.txt
+	@echo "--- In prod only (not in sql/database_ddl.sql) ---"
+	@comm -23 .schema_prod_sorted.txt .schema_ddl_sorted.txt 2>/dev/null || true
+	@echo ""
+	@echo "--- In sql/database_ddl.sql only (not in prod) ---"
+	@comm -13 .schema_prod_sorted.txt .schema_ddl_sorted.txt 2>/dev/null || true
+	@rm -f .schema_prod.txt .schema_ddl.txt .schema_prod_sorted.txt .schema_ddl_sorted.txt
+
+# Exact DDL diff: pg_dump --schema-only from prod (via fly mpg proxy) vs sql/database_ddl.sql.
+# Uses same auth as fly-db-connect: credentials from `fly mpg status -j` (requires jq).
+# Requires: FLY_DB_CLUSTER_ID, jq; no DATABASE_URL needed.
+.PHONY: fly-db-ddl-diff
+fly-db-ddl-diff: ## Exact DDL diff: prod schema (pg_dump) vs sql/database_ddl.sql
+	@command -v jq >/dev/null 2>&1 || (echo "Error: jq required (e.g. apt install jq)."; exit 1)
+	@rm -f .schema_prod_ddl.sql
+	@( \
+		fly mpg proxy $(FLY_DB_CLUSTER_ID) -p $(FLY_DB_PROXY_PORT) & \
+		PID=$$!; \
+		trap "kill $$PID 2>/dev/null || true" EXIT; \
+		i=0; while [ $$i -lt 30 ]; do \
+			nc -z 127.0.0.1 $(FLY_DB_PROXY_PORT) 2>/dev/null && break; \
+			sleep 1; i=$$((i+1)); \
+			[ $$i -eq 30 ] && { echo "Error: proxy did not become ready in 30s."; exit 1; }; \
+		done; \
+		PROXY_URL=$$(fly mpg status $(FLY_DB_CLUSTER_ID) -j | jq -r --arg host "localhost:$(FLY_DB_PROXY_PORT)" --arg db "$(FLY_DB_NAME)" '.credentials | "postgres://\(.user):\(.password)@\($$host)/\($$db)"'); \
+		pg_dump "$$PROXY_URL" --schema-only --no-owner --no-privileges -f .schema_prod_ddl.sql; \
+		exit_code=$$?; \
+		exit $$exit_code; \
+	)
+	@echo "--- diff: sql/database_ddl.sql (left) vs prod (right) ---"
+	@diff -u sql/database_ddl.sql .schema_prod_ddl.sql || true
+	@rm -f .schema_prod_ddl.sql
 
 
 

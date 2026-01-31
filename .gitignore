@@ -23,3 +23,7 @@ scratchpad.txt
 .env.local
 .env.*.local
 config.env
+
+# Schema diff temp files (make fly-db-schema-diff, make fly-db-ddl-diff)
+.schema_*.txt
+.schema_*.sql

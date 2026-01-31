@@ -50,7 +50,10 @@ mod twitter;
 
 use config::get_server_port;
 use cronjob::start_gmgv_cronjob;
-use handlers::{handle_health, handle_reputest_get, handle_reputest_post, handle_root};
+use handlers::{
+    handle_health, handle_login, handle_login_start, handle_logout, handle_playground_get,
+    handle_playground_post, handle_reputest_get, handle_reputest_post, handle_root, AppState,
+};
 
 /// Main entry point for the reputest web service.
 ///
@@ -173,13 +176,25 @@ async fn main() {
         }
     });
 
+    let app_state = AppState {
+        pool: db_pool.clone(),
+        base_url: config::get_base_url().ok(),
+        oauth_client_id: std::env::var("XAPI_CLIENT_ID").ok(),
+        oauth_client_secret: std::env::var("XAPI_CLIENT_SECRET").ok(),
+    };
+
     // Build the HTTP application with all routes and middleware
     let app = Router::new()
         .route("/", get(handle_root))
         .route("/reputest", get(handle_reputest_get))
         .route("/reputest", post(handle_reputest_post))
         .route("/health", get(handle_health))
-        .with_state(db_pool)
+        .route("/login", get(handle_login))
+        .route("/login/start", get(handle_login_start))
+        .route("/playground", get(handle_playground_get))
+        .route("/playground", post(handle_playground_post))
+        .route("/logout", get(handle_logout))
+        .with_state(app_state)
         .layer(
             ServiceBuilder::new()
                 .layer(TraceLayer::new_for_http())
