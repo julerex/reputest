@@ -236,3 +236,7 @@ upgrade-deps: ## Upgrade all cargo dependencies to latest compatible versions (r
 
 .PHONY: checkall
 checkall: test format clippy ## Run all checks
+
+.PHONY: setup-hooks
+setup-hooks: ## Install git hooks from scripts/git-hooks/
+	@./scripts/setup_git_hooks.sh

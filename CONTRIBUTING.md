@@ -59,6 +59,11 @@ git checkout -b feature/your-feature-name
 cp .env.example .env
 # Edit .env with your configuration
 
+# Set up git hooks (optional but recommended)
+# This installs pre-push hooks that run Rust checks before pushing
+make setup-hooks
+# Or manually: ./scripts/setup_git_hooks.sh
+
 # Run tests
 cargo test
 

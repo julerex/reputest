@@ -92,3 +92,8 @@ path = "scripts/refresh_access_token.rs"
 [[bin]]
 name = "encrypt_token"
 path = "scripts/encrypt_token.rs"
+
+# Binary for setting up git hooks
+[[bin]]
+name = "setup_git_hooks"
+path = "scripts/setup_git_hooks.rs"
