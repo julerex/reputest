@@ -224,5 +224,15 @@ format: ## Format code
 clippy: ## Run clippy
 	unset ARGV0 && cargo clippy --all-targets --all-features -- -D warnings
 
+.PHONY: upgrade-deps
+upgrade-deps: ## Upgrade all cargo dependencies to latest compatible versions (requires cargo-edit: cargo install cargo-edit)
+	@command -v cargo >/dev/null 2>&1 || { echo "Error: cargo is required but not installed." >&2; exit 1; }
+	@cargo --list 2>/dev/null | grep -q "upgrade" || { \
+		echo "Error: cargo-edit is required but not installed." >&2; \
+		echo "Install it with: cargo install cargo-edit" >&2; \
+		exit 1; \
+	}
+	unset ARGV0 && cargo upgrade
+
 .PHONY: checkall
 checkall: test format clippy ## Run all checks
