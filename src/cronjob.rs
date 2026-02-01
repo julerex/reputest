@@ -5,7 +5,8 @@
 
 use crate::db::{
     get_good_vibes_count, get_user_id_by_username, get_vibe_score_one, get_vibe_score_three,
-    get_vibe_score_two, has_vibe_request, refresh_materialized_views, save_vibe_request,
+    get_vibe_score_two, get_vibe_score_four, get_vibe_score_five, get_vibe_score_six,
+    has_vibe_request, refresh_materialized_views, save_vibe_request,
 };
 use crate::twitter::{
     reply_to_tweet, sanitize_for_logging, search_mentions, search_tweets_with_hashtag,
@@ -138,7 +139,10 @@ async fn process_materialized_view_refresh() {
     let pool = match crate::db::get_db_pool().await {
         Ok(pool) => pool,
         Err(e) => {
-            error!("Failed to get database pool for materialized view refresh: {}", e);
+            error!(
+                "Failed to get database pool for materialized view refresh: {}",
+                e
+            );
             return;
         }
     };
@@ -212,16 +216,19 @@ async fn process_vibe_query(
         }
     };
 
-    // Calculate the three-degree vibe scores
+    // Calculate the vibe scores (degrees 1, 2, 3, 4, 5, and 6)
     match tokio::try_join!(
         get_vibe_score_one(pool, &author_user_id, &mentioned_user_id),
         get_vibe_score_two(pool, &author_user_id, &mentioned_user_id),
-        get_vibe_score_three(pool, &author_user_id, &mentioned_user_id)
+        get_vibe_score_three(pool, &author_user_id, &mentioned_user_id),
+        get_vibe_score_four(pool, &author_user_id, &mentioned_user_id),
+        get_vibe_score_five(pool, &author_user_id, &mentioned_user_id),
+        get_vibe_score_six(pool, &author_user_id, &mentioned_user_id)
     ) {
-        Ok((score_one, score_two, score_three)) => {
+        Ok((score_one, score_two, score_three, score_four, score_five, score_six)) => {
             let reply_text = format!(
-                "Your vibes for {} are:\n1st degree: {}\n2nd degree: {}\n3rd degree: {}",
-                mentioned_username, score_one, score_two, score_three
+                "Your vibes for {} are:\n1st degree: {}\n2nd degree: {}\n3rd degree: {}\n4th degree: {}\n5th degree: {}\n6th degree: {}",
+                mentioned_username, score_one, score_two, score_three, score_four, score_five, score_six
             );
             send_reply_and_mark_processed(pool, &reply_text, tweet_id, author_username).await;
         }

@@ -1089,6 +1089,52 @@ pub async fn get_vibe_score_three(
     Ok(score)
 }
 
+/// Calculates the fourth-degree vibe score (paths of length 4) between two users.
+///
+/// This function counts the number of acyclic paths of length exactly 4 from emitter to sensor
+/// in the good vibes graph (emitter -> X -> Y -> Z -> sensor), where all nodes in each path are distinct.
+///
+/// # Parameters
+///
+/// - `pool`: A reference to the PostgreSQL connection pool
+/// - `sensor_user_id`: The user ID of the person receiving good vibes (sensor)
+/// - `emitter_user_id`: The user ID of the person giving good vibes (emitter)
+///
+/// # Returns
+///
+/// - `Ok(count)`: Number of paths of length 4
+/// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the query fails
+pub async fn get_vibe_score_four(
+    pool: &PgPool,
+    sensor_user_id: &str,
+    emitter_user_id: &str,
+) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+    info!(
+        "Calculating fourth-degree vibe score for sensor {} from emitter {}",
+        sensor_user_id, emitter_user_id
+    );
+
+    let path_count: Option<i64> = sqlx::query_scalar(
+        r#"
+        SELECT path_count
+        FROM view_good_vibes_degree_four
+        WHERE sensor_id = $1 AND emitter_id = $2
+        "#,
+    )
+    .bind(sensor_user_id)
+    .bind(emitter_user_id)
+    .fetch_optional(pool)
+    .await?;
+
+    let score = path_count.unwrap_or(0) as usize;
+    info!(
+        "Found {} paths of length 4 from {} to {} - fourth-degree score: {}",
+        score, emitter_user_id, sensor_user_id, score
+    );
+
+    Ok(score)
+}
+
 /// Calculates the fifth-degree vibe score (paths of length 5) between two users.
 ///
 /// This function counts the number of acyclic paths of length exactly 5 from emitter to sensor
@@ -1345,7 +1391,10 @@ pub async fn refresh_materialized_views(
             .execute(pool)
             .await?;
         let elapsed_ms = start.elapsed().as_millis() as i32;
-        info!("Refreshed view_good_vibes_degree_three in {} ms", elapsed_ms);
+        info!(
+            "Refreshed view_good_vibes_degree_three in {} ms",
+            elapsed_ms
+        );
 
         sqlx::query(
             r#"
