@@ -40,9 +40,7 @@ fn main() {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let mut perms = fs::metadata(&pre_push_target)
-            .unwrap()
-            .permissions();
+        let mut perms = fs::metadata(&pre_push_target).unwrap().permissions();
         perms.set_mode(0o755);
         fs::set_permissions(&pre_push_target, perms).unwrap_or_else(|e| {
             eprintln!("Warning: Could not set executable permissions: {}", e);
@@ -52,4 +50,3 @@ fn main() {
     println!("✓ Git hooks installed successfully!");
     println!("  Pre-push hook: {:?}", pre_push_target);
 }
-
