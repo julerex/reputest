@@ -1342,14 +1342,14 @@ pub async fn refresh_materialized_views(
     info!("Starting materialized view refresh");
 
     let start = std::time::Instant::now();
-    
+
     // Call the database function which handles all refreshes and timing metrics
     sqlx::query("SELECT refresh_all_materialized_views()")
         .execute(pool)
         .await?;
-    
+
     let elapsed_ms = start.elapsed().as_millis();
     info!("Completed materialized view refresh in {} ms", elapsed_ms);
-    
+
     Ok(())
 }

@@ -4,8 +4,8 @@
 //! for searching Twitter for tweets with specific hashtags and processing vibe-related queries.
 
 use crate::db::{
-    get_good_vibes_count, get_user_id_by_username, get_vibe_score_one, get_vibe_score_three,
-    get_vibe_score_two, get_vibe_score_four, get_vibe_score_five, get_vibe_score_six,
+    get_good_vibes_count, get_user_id_by_username, get_vibe_score_five, get_vibe_score_four,
+    get_vibe_score_one, get_vibe_score_six, get_vibe_score_three, get_vibe_score_two,
     has_vibe_request, refresh_materialized_views, save_vibe_request,
 };
 use crate::twitter::{
