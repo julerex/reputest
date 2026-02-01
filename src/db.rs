@@ -1089,6 +1089,98 @@ pub async fn get_vibe_score_three(
     Ok(score)
 }
 
+/// Calculates the fifth-degree vibe score (paths of length 5) between two users.
+///
+/// This function counts the number of acyclic paths of length exactly 5 from emitter to sensor
+/// in the good vibes graph (emitter -> X -> Y -> Z -> W -> sensor), where all nodes in each path are distinct.
+///
+/// # Parameters
+///
+/// - `pool`: A reference to the PostgreSQL connection pool
+/// - `sensor_user_id`: The user ID of the person receiving good vibes (sensor)
+/// - `emitter_user_id`: The user ID of the person giving good vibes (emitter)
+///
+/// # Returns
+///
+/// - `Ok(count)`: Number of paths of length 5
+/// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the query fails
+pub async fn get_vibe_score_five(
+    pool: &PgPool,
+    sensor_user_id: &str,
+    emitter_user_id: &str,
+) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+    info!(
+        "Calculating fifth-degree vibe score for sensor {} from emitter {}",
+        sensor_user_id, emitter_user_id
+    );
+
+    let path_count: Option<i64> = sqlx::query_scalar(
+        r#"
+        SELECT path_count
+        FROM view_good_vibes_degree_five
+        WHERE sensor_id = $1 AND emitter_id = $2
+        "#,
+    )
+    .bind(sensor_user_id)
+    .bind(emitter_user_id)
+    .fetch_optional(pool)
+    .await?;
+
+    let score = path_count.unwrap_or(0) as usize;
+    info!(
+        "Found {} paths of length 5 from {} to {} - fifth-degree score: {}",
+        score, emitter_user_id, sensor_user_id, score
+    );
+
+    Ok(score)
+}
+
+/// Calculates the sixth-degree vibe score (paths of length 6) between two users.
+///
+/// This function counts the number of acyclic paths of length exactly 6 from emitter to sensor
+/// in the good vibes graph (emitter -> X -> Y -> Z -> W -> V -> sensor), where all nodes in each path are distinct.
+///
+/// # Parameters
+///
+/// - `pool`: A reference to the PostgreSQL connection pool
+/// - `sensor_user_id`: The user ID of the person receiving good vibes (sensor)
+/// - `emitter_user_id`: The user ID of the person giving good vibes (emitter)
+///
+/// # Returns
+///
+/// - `Ok(count)`: Number of paths of length 6
+/// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the query fails
+pub async fn get_vibe_score_six(
+    pool: &PgPool,
+    sensor_user_id: &str,
+    emitter_user_id: &str,
+) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+    info!(
+        "Calculating sixth-degree vibe score for sensor {} from emitter {}",
+        sensor_user_id, emitter_user_id
+    );
+
+    let path_count: Option<i64> = sqlx::query_scalar(
+        r#"
+        SELECT path_count
+        FROM view_good_vibes_degree_six
+        WHERE sensor_id = $1 AND emitter_id = $2
+        "#,
+    )
+    .bind(sensor_user_id)
+    .bind(emitter_user_id)
+    .fetch_optional(pool)
+    .await?;
+
+    let score = path_count.unwrap_or(0) as usize;
+    info!(
+        "Found {} paths of length 6 from {} to {} - sixth-degree score: {}",
+        score, emitter_user_id, sensor_user_id, score
+    );
+
+    Ok(score)
+}
+
 /// Calculates the combined vibe score between two users (deprecated - use individual degree functions).
 ///
 /// This function is kept for backward compatibility but now delegates to the individual
@@ -1127,12 +1219,14 @@ pub struct AllGoodVibesDegrees {
     pub degree_two_path_count: i64,
     pub degree_three_path_count: i64,
     pub degree_four_path_count: i64,
+    pub degree_five_path_count: i64,
+    pub degree_six_path_count: i64,
 }
 
 /// Retrieves all rows from the view_all_good_vibes_degrees view.
 ///
 /// This function queries the view and returns all rows with sensor username,
-/// emitter username, and all four degree path counts.
+/// emitter username, and all six degree path counts.
 ///
 /// # Parameters
 ///
@@ -1150,7 +1244,8 @@ pub async fn get_all_good_vibes_degrees(
     let rows = sqlx::query(
         r#"
         SELECT sensor_username, sensor_name, emitter_username, emitter_name,
-               degree_one_path_count, degree_two_path_count, degree_three_path_count, degree_four_path_count
+               degree_one_path_count, degree_two_path_count, degree_three_path_count, degree_four_path_count,
+               degree_five_path_count, degree_six_path_count
         FROM view_all_good_vibes_degrees
         "#,
     )
@@ -1168,6 +1263,8 @@ pub async fn get_all_good_vibes_degrees(
             degree_two_path_count: row.get("degree_two_path_count"),
             degree_three_path_count: row.get("degree_three_path_count"),
             degree_four_path_count: row.get("degree_four_path_count"),
+            degree_five_path_count: row.get("degree_five_path_count"),
+            degree_six_path_count: row.get("degree_six_path_count"),
         });
     }
 
@@ -1176,4 +1273,179 @@ pub async fn get_all_good_vibes_degrees(
         results.len()
     );
     Ok(results)
+}
+
+/// Refreshes all materialized views and records timing metrics.
+///
+/// This function refreshes each materialized view sequentially (degree 1-6, then combined view),
+/// measures the time taken for each refresh, and records the metrics in the `vibe_materialize_time` table.
+///
+/// # Parameters
+///
+/// - `pool`: A reference to the PostgreSQL connection pool
+///
+/// # Returns
+///
+/// - `Ok(())`: If all refreshes completed successfully
+/// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If any refresh fails
+pub async fn refresh_materialized_views(
+    pool: &PgPool,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    info!("Starting materialized view refresh");
+
+    // Refresh degree 1 view
+    {
+        let start = std::time::Instant::now();
+        info!("Refreshing view_good_vibes_degree_one");
+        sqlx::query("REFRESH MATERIALIZED VIEW view_good_vibes_degree_one")
+            .execute(pool)
+            .await?;
+        let elapsed_ms = start.elapsed().as_millis() as i32;
+        info!("Refreshed view_good_vibes_degree_one in {} ms", elapsed_ms);
+
+        sqlx::query(
+            r#"
+            INSERT INTO vibe_materialize_time (degree, refresh_time, time_taken_ms)
+            VALUES ($1, NOW(), $2)
+            "#,
+        )
+        .bind(1i32)
+        .bind(elapsed_ms)
+        .execute(pool)
+        .await?;
+    }
+
+    // Refresh degree 2 view
+    {
+        let start = std::time::Instant::now();
+        info!("Refreshing view_good_vibes_degree_two");
+        sqlx::query("REFRESH MATERIALIZED VIEW view_good_vibes_degree_two")
+            .execute(pool)
+            .await?;
+        let elapsed_ms = start.elapsed().as_millis() as i32;
+        info!("Refreshed view_good_vibes_degree_two in {} ms", elapsed_ms);
+
+        sqlx::query(
+            r#"
+            INSERT INTO vibe_materialize_time (degree, refresh_time, time_taken_ms)
+            VALUES ($1, NOW(), $2)
+            "#,
+        )
+        .bind(2i32)
+        .bind(elapsed_ms)
+        .execute(pool)
+        .await?;
+    }
+
+    // Refresh degree 3 view
+    {
+        let start = std::time::Instant::now();
+        info!("Refreshing view_good_vibes_degree_three");
+        sqlx::query("REFRESH MATERIALIZED VIEW view_good_vibes_degree_three")
+            .execute(pool)
+            .await?;
+        let elapsed_ms = start.elapsed().as_millis() as i32;
+        info!("Refreshed view_good_vibes_degree_three in {} ms", elapsed_ms);
+
+        sqlx::query(
+            r#"
+            INSERT INTO vibe_materialize_time (degree, refresh_time, time_taken_ms)
+            VALUES ($1, NOW(), $2)
+            "#,
+        )
+        .bind(3i32)
+        .bind(elapsed_ms)
+        .execute(pool)
+        .await?;
+    }
+
+    // Refresh degree 4 view
+    {
+        let start = std::time::Instant::now();
+        info!("Refreshing view_good_vibes_degree_four");
+        sqlx::query("REFRESH MATERIALIZED VIEW view_good_vibes_degree_four")
+            .execute(pool)
+            .await?;
+        let elapsed_ms = start.elapsed().as_millis() as i32;
+        info!("Refreshed view_good_vibes_degree_four in {} ms", elapsed_ms);
+
+        sqlx::query(
+            r#"
+            INSERT INTO vibe_materialize_time (degree, refresh_time, time_taken_ms)
+            VALUES ($1, NOW(), $2)
+            "#,
+        )
+        .bind(4i32)
+        .bind(elapsed_ms)
+        .execute(pool)
+        .await?;
+    }
+
+    // Refresh degree 5 view
+    {
+        let start = std::time::Instant::now();
+        info!("Refreshing view_good_vibes_degree_five");
+        sqlx::query("REFRESH MATERIALIZED VIEW view_good_vibes_degree_five")
+            .execute(pool)
+            .await?;
+        let elapsed_ms = start.elapsed().as_millis() as i32;
+        info!("Refreshed view_good_vibes_degree_five in {} ms", elapsed_ms);
+
+        sqlx::query(
+            r#"
+            INSERT INTO vibe_materialize_time (degree, refresh_time, time_taken_ms)
+            VALUES ($1, NOW(), $2)
+            "#,
+        )
+        .bind(5i32)
+        .bind(elapsed_ms)
+        .execute(pool)
+        .await?;
+    }
+
+    // Refresh degree 6 view
+    {
+        let start = std::time::Instant::now();
+        info!("Refreshing view_good_vibes_degree_six");
+        sqlx::query("REFRESH MATERIALIZED VIEW view_good_vibes_degree_six")
+            .execute(pool)
+            .await?;
+        let elapsed_ms = start.elapsed().as_millis() as i32;
+        info!("Refreshed view_good_vibes_degree_six in {} ms", elapsed_ms);
+
+        sqlx::query(
+            r#"
+            INSERT INTO vibe_materialize_time (degree, refresh_time, time_taken_ms)
+            VALUES ($1, NOW(), $2)
+            "#,
+        )
+        .bind(6i32)
+        .bind(elapsed_ms)
+        .execute(pool)
+        .await?;
+    }
+
+    // Refresh combined view (record with degree=NULL)
+    {
+        let start = std::time::Instant::now();
+        info!("Refreshing view_all_good_vibes_degrees");
+        sqlx::query("REFRESH MATERIALIZED VIEW view_all_good_vibes_degrees")
+            .execute(pool)
+            .await?;
+        let elapsed_ms = start.elapsed().as_millis() as i32;
+        info!("Refreshed view_all_good_vibes_degrees in {} ms", elapsed_ms);
+
+        sqlx::query(
+            r#"
+            INSERT INTO vibe_materialize_time (degree, refresh_time, time_taken_ms)
+            VALUES (NULL, NOW(), $1)
+            "#,
+        )
+        .bind(elapsed_ms)
+        .execute(pool)
+        .await?;
+    }
+
+    info!("Completed materialized view refresh");
+    Ok(())
 }

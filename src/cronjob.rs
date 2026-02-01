@@ -5,7 +5,7 @@
 
 use crate::db::{
     get_good_vibes_count, get_user_id_by_username, get_vibe_score_one, get_vibe_score_three,
-    get_vibe_score_two, has_vibe_request, save_vibe_request,
+    get_vibe_score_two, has_vibe_request, refresh_materialized_views, save_vibe_request,
 };
 use crate::twitter::{
     reply_to_tweet, sanitize_for_logging, search_mentions, search_tweets_with_hashtag,
@@ -17,11 +17,12 @@ use tokio_cron_scheduler::{Job, JobScheduler};
 /// Starts the cronjob scheduler for searching tweets with hashtag "gmgv" and processing vibe queries every 5 minutes.
 ///
 /// This function creates a new job scheduler and adds a job that runs every 5 minutes
-/// to perform two tasks:
+/// to perform three tasks:
 /// 1. Search for tweets containing the hashtag "gmgv" from the past 6 hours
 /// 2. Check for mentions of @reputest from the past 6 hours and reply to:
 ///    - Specific vibe score queries (e.g., "@reputest @username?")
 ///    - General requests for the total vibes count (messages containing "vibecount")
+/// 3. Refresh all materialized views (degree 1-4 and combined view) and record timing metrics
 ///
 /// The job will log all found tweets and mentions to the application logs.
 ///
@@ -127,6 +128,27 @@ async fn process_mentions() {
         }
         Err(e) => {
             error!("Scheduled check for mentions failed: {}", e);
+        }
+    }
+}
+
+/// Processes materialized view refresh as the last step of the cronjob
+async fn process_materialized_view_refresh() {
+    info!("Starting materialized view refresh");
+    let pool = match crate::db::get_db_pool().await {
+        Ok(pool) => pool,
+        Err(e) => {
+            error!("Failed to get database pool for materialized view refresh: {}", e);
+            return;
+        }
+    };
+
+    match refresh_materialized_views(&pool).await {
+        Ok(_) => {
+            info!("Materialized view refresh completed successfully");
+        }
+        Err(e) => {
+            error!("Materialized view refresh failed: {}", e);
         }
     }
 }
@@ -333,11 +355,12 @@ pub async fn start_gmgv_cronjob() -> Result<JobScheduler, Box<dyn std::error::Er
             Box::pin(async {
                 process_hashtag_search().await;
                 process_mentions().await;
+                process_materialized_view_refresh().await;
             })
         })?)
         .await?;
 
-    info!("Cronjob scheduler configured to search for #gmgv tweets and process vibe queries every 5 minutes");
+    info!("Cronjob scheduler configured to search for #gmgv tweets, process vibe queries, and refresh materialized views every 5 minutes");
     Ok(sched)
 }
 

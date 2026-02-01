@@ -179,6 +179,8 @@ pub async fn handle_root(
                     <th class="count">two-degree-vibe-count</th>
                     <th class="count">three-degree-vibe-count</th>
                     <th class="count">four-degree-vibe-count</th>
+                    <th class="count">five-degree-vibe-count</th>
+                    <th class="count">six-degree-vibe-count</th>
                 </tr>
             </thead>
             <tbody>
@@ -187,7 +189,7 @@ pub async fn handle_root(
 
             for row in rows {
                 html.push_str(&format!(
-                    "                <tr>\n                    <td>{}</td>\n                    <td>{}</td>\n                    <td>{}</td>\n                    <td>{}</td>\n                    <td class=\"count\">{}</td>\n                    <td class=\"count\">{}</td>\n                    <td class=\"count\">{}</td>\n                    <td class=\"count\">{}</td>\n                </tr>\n",
+                    "                <tr>\n                    <td>{}</td>\n                    <td>{}</td>\n                    <td>{}</td>\n                    <td>{}</td>\n                    <td class=\"count\">{}</td>\n                    <td class=\"count\">{}</td>\n                    <td class=\"count\">{}</td>\n                    <td class=\"count\">{}</td>\n                    <td class=\"count\">{}</td>\n                    <td class=\"count\">{}</td>\n                </tr>\n",
                     html_escape(&row.sensor_username),
                     html_escape(&row.sensor_name),
                     html_escape(&row.emitter_username),
@@ -195,7 +197,9 @@ pub async fn handle_root(
                     row.degree_one_path_count,
                     row.degree_two_path_count,
                     row.degree_three_path_count,
-                    row.degree_four_path_count
+                    row.degree_four_path_count,
+                    row.degree_five_path_count,
+                    row.degree_six_path_count
                 ));
             }
 
