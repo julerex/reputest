@@ -32,7 +32,10 @@ pub struct AppState {
 }
 
 /// Parses a cookie value from the Cookie header by name.
-fn get_cookie_from_header(cookie_header: Option<&axum::http::HeaderValue>, name: &str) -> Option<String> {
+fn get_cookie_from_header(
+    cookie_header: Option<&axum::http::HeaderValue>,
+    name: &str,
+) -> Option<String> {
     let s = cookie_header?.to_str().ok()?;
     for part in s.split("; ") {
         let mut it = part.splitn(2, '=');
@@ -50,16 +53,12 @@ pub async fn handle_reputest_get(
     Query(query): Query<OAuthCallbackQuery>,
     request: Request,
 ) -> axum::response::Response {
-    let is_oauth_callback = query
-        .code
-        .as_deref()
-        .map_or(false, |s| !s.is_empty())
-        && query
-            .state
-            .as_deref()
-            .map_or(false, |s| !s.is_empty());
+    let is_oauth_callback = query.code.as_deref().is_some_and(|s| !s.is_empty())
+        && query.state.as_deref().is_some_and(|s| !s.is_empty());
     if is_oauth_callback {
-        oauth_callback_response(state, query, request).await.into_response()
+        oauth_callback_response(state, query, request)
+            .await
+            .into_response()
     } else {
         info!("Reputesting!");
         "Reputesting!".into_response()
@@ -222,14 +221,16 @@ pub async fn handle_root(
 }
 
 /// GET /login — Login page with "Login with X" link. If already logged in, redirect to /playground.
-pub async fn handle_login(
-    State(state): State<AppState>,
-    request: Request,
-) -> impl IntoResponse {
+pub async fn handle_login(State(state): State<AppState>, request: Request) -> impl IntoResponse {
     let cookie_header = request.headers().get(header::COOKIE);
     if let Some(sid) = get_cookie_from_header(cookie_header, "session_id") {
         if let Ok(id) = sqlx::types::Uuid::parse_str(&sid) {
-            if get_session_by_id(&state.pool, id).await.ok().flatten().is_some() {
+            if get_session_by_id(&state.pool, id)
+                .await
+                .ok()
+                .flatten()
+                .is_some()
+            {
                 return Redirect::to("/playground").into_response();
             }
         }
@@ -262,20 +263,14 @@ pub async fn handle_login(
 pub async fn handle_login_start(
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let base_url = state
-        .base_url
-        .as_deref()
-        .ok_or((
-            StatusCode::SERVICE_UNAVAILABLE,
-            "Web login not configured (BASE_URL).".to_string(),
-        ))?;
-    let client_id = state
-        .oauth_client_id
-        .as_deref()
-        .ok_or((
-            StatusCode::SERVICE_UNAVAILABLE,
-            "Web login not configured (XAPI_CLIENT_ID).".to_string(),
-        ))?;
+    let base_url = state.base_url.as_deref().ok_or((
+        StatusCode::SERVICE_UNAVAILABLE,
+        "Web login not configured (BASE_URL).".to_string(),
+    ))?;
+    let client_id = state.oauth_client_id.as_deref().ok_or((
+        StatusCode::SERVICE_UNAVAILABLE,
+        "Web login not configured (XAPI_CLIENT_ID).".to_string(),
+    ))?;
     let redirect_uri = base_url.trim_end_matches('/').to_string();
     let code_verifier = generate_code_verifier();
     let code_challenge = generate_code_challenge(&code_verifier);
@@ -318,8 +313,8 @@ pub async fn handle_login_start(
 /// Query params for OAuth callback.
 #[derive(serde::Deserialize)]
 pub struct OAuthCallbackQuery {
-    code: Option<String>,
-    state: Option<String>,
+    pub code: Option<String>,
+    pub state: Option<String>,
 }
 
 /// Performs the OAuth callback: exchange code for tokens, create session, redirect to /playground.
@@ -427,8 +422,14 @@ async fn oauth_callback_response(
             let body = resp.text().await.unwrap_or_default();
             let json: Value = serde_json::from_str(&body).unwrap_or(Value::Null);
             let data = json.get("data");
-            let user_id = data.and_then(|d| d.get("id")).and_then(|v| v.as_str()).map(String::from);
-            let username = data.and_then(|d| d.get("username")).and_then(|v| v.as_str()).map(String::from);
+            let user_id = data
+                .and_then(|d| d.get("id"))
+                .and_then(|v| v.as_str())
+                .map(String::from);
+            let username = data
+                .and_then(|d| d.get("username"))
+                .and_then(|v| v.as_str())
+                .map(String::from);
             match (user_id, username) {
                 (Some(id), Some(un)) => (id, un),
                 _ => {
@@ -453,7 +454,10 @@ async fn oauth_callback_response(
 
     if let Some(allowed) = get_allowed_username() {
         if username != allowed {
-            warn!("Login rejected: username {} not in ALLOWED_USERNAME", username);
+            warn!(
+                "Login rejected: username {} not in ALLOWED_USERNAME",
+                username
+            );
             return (
                 StatusCode::FORBIDDEN,
                 "You are not allowed to log in to this application.".to_string(),
@@ -518,10 +522,7 @@ async fn oauth_callback_response(
 }
 
 /// Loads session from Cookie header if present and valid. Returns None if missing or expired.
-async fn get_session_from_headers(
-    state: &AppState,
-    headers: &HeaderMap,
-) -> Option<WebSession> {
+async fn get_session_from_headers(state: &AppState, headers: &HeaderMap) -> Option<WebSession> {
     let cookie_header = headers.get(header::COOKIE);
     let sid = get_cookie_from_header(cookie_header, "session_id")?;
     let id = sqlx::types::Uuid::parse_str(&sid).ok()?;
@@ -582,8 +583,12 @@ pub async fn handle_playground_post(
 
     let path = form.path.trim().trim_start_matches('/');
     if path.is_empty() {
-        return playground_response(&session.username, &form, Some(Err("Path is required".to_string())))
-            .into_response();
+        return playground_response(
+            &session.username,
+            &form,
+            Some(Err("Path is required".to_string())),
+        )
+        .into_response();
     }
     if !path.starts_with("2/") {
         return playground_response(
@@ -707,20 +712,11 @@ fn playground_response(
     form: &PlaygroundForm,
     result: Option<Result<(u16, String), String>>,
 ) -> String {
-    playground_html(
-        username,
-        &form.path,
-        &form.method,
-        &form.body,
-        result,
-    )
+    playground_html(username, &form.path, &form.method, &form.body, result)
 }
 
 /// GET /logout — Delete session and redirect to /login.
-pub async fn handle_logout(
-    State(state): State<AppState>,
-    request: Request,
-) -> impl IntoResponse {
+pub async fn handle_logout(State(state): State<AppState>, request: Request) -> impl IntoResponse {
     let cookie_header = request.headers().get(header::COOKIE);
     let sid = get_cookie_from_header(cookie_header, "session_id");
     if let Some(s) = sid {

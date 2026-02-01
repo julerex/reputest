@@ -58,8 +58,8 @@ use tower::ServiceExt;
 ///
 /// # Returns
 ///
-/// An Axum `Router` instance configured with application routes.
-fn create_test_app(pool: PgPool) -> Router<AppState> {
+/// An Axum `Router` instance configured with application routes and state.
+fn create_test_app(pool: PgPool) -> Router {
     let app_state = AppState {
         pool: pool.clone(),
         base_url: None,
@@ -218,6 +218,7 @@ async fn test_root_endpoint() {
         .body(Body::empty())
         .unwrap();
 
+    // In Axum 0.7, use oneshot from ServiceExt to call the router
     let response = app.oneshot(request).await.unwrap();
     let status = response.status();
 

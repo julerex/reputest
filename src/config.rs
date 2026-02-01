@@ -356,11 +356,6 @@ pub fn get_server_port() -> u16 {
 /// Must match the Callback URI configured in the X Developer Portal (e.g. https://reputest.fly.dev/reputest).
 const CALLBACK_URI: &str = "https://reputest.fly.dev/reputest";
 
-/// Gets the OAuth callback URI (used as redirect_uri in the OAuth flow).
-pub fn get_callback_uri() -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-    Ok(CALLBACK_URI.to_string())
-}
-
 /// Gets the base URL for app state (same as callback URI for this app).
 pub fn get_base_url() -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     Ok(CALLBACK_URI.to_string())

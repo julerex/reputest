@@ -261,6 +261,7 @@ pub async fn save_access_token(
 }
 
 /// Data for a web login session (decrypted tokens).
+#[allow(dead_code)] // Fields are part of the session data model; some may not be read yet
 #[derive(Clone, Debug)]
 pub struct WebSession {
     pub id: sqlx::types::Uuid,
@@ -288,9 +289,7 @@ pub async fn create_session(
 
     let id = sqlx::types::Uuid::new_v4();
     let access_enc = encrypt_token(access_token)?;
-    let refresh_enc: Option<String> = refresh_token
-        .map(encrypt_token)
-        .transpose()?;
+    let refresh_enc: Option<String> = refresh_token.map(encrypt_token).transpose()?;
 
     sqlx::query(
         r#"
@@ -365,6 +364,7 @@ pub async fn delete_session(
 }
 
 /// Deletes expired sessions (optional cleanup).
+#[allow(dead_code)] // Infrastructure for future cronjob/maintenance task
 pub async fn delete_expired_sessions(
     pool: &PgPool,
 ) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {

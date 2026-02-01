@@ -156,8 +156,7 @@ pub async fn refresh_access_token(
 /// Generates a cryptographically secure PKCE code verifier (128 chars).
 pub fn generate_code_verifier() -> String {
     use rand::Rng;
-    const CHARSET: &[u8] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
+    const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
     let mut rng = rand::thread_rng();
     (0..128)
         .map(|_| {
@@ -181,8 +180,7 @@ pub fn generate_code_challenge(code_verifier: &str) -> String {
 /// Generates a cryptographically secure state parameter for CSRF protection.
 pub fn generate_oauth_state() -> String {
     use rand::Rng;
-    const CHARSET: &[u8] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     let mut rng = rand::thread_rng();
     (0..32)
         .map(|_| {
