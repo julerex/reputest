@@ -975,8 +975,19 @@ pub async fn get_vibe_score_one(
         sensor_user_id, emitter_user_id
     );
 
-    let has_direct = has_good_vibes_record(pool, sensor_user_id, emitter_user_id).await?;
-    let score = if has_direct { 1 } else { 0 };
+    let path_count: Option<i64> = sqlx::query_scalar(
+        r#"
+        SELECT path_count
+        FROM view_good_vibes_degree_one
+        WHERE sensor_id = $1 AND emitter_id = $2
+        "#,
+    )
+    .bind(sensor_user_id)
+    .bind(emitter_user_id)
+    .fetch_optional(pool)
+    .await?;
+
+    let score = path_count.unwrap_or(0) as usize;
 
     info!(
         "First-degree vibe score from {} to {}: {}",
@@ -1011,26 +1022,22 @@ pub async fn get_vibe_score_two(
         sensor_user_id, emitter_user_id
     );
 
-    let path_count: i64 = sqlx::query_scalar(
+    let path_count: Option<i64> = sqlx::query_scalar(
         r#"
-        SELECT COUNT(*) as path_count
-        FROM good_vibes g1
-        JOIN good_vibes g2 ON g1.sensor_id = g2.emitter_id
-        WHERE g1.emitter_id = $1 AND g2.sensor_id = $2
-          AND g1.emitter_id != g1.sensor_id
-          AND g1.emitter_id != g2.sensor_id
-          AND g1.sensor_id != g2.sensor_id
+        SELECT path_count
+        FROM view_good_vibes_degree_two
+        WHERE sensor_id = $1 AND emitter_id = $2
         "#,
     )
-    .bind(emitter_user_id)
     .bind(sensor_user_id)
-    .fetch_one(pool)
+    .bind(emitter_user_id)
+    .fetch_optional(pool)
     .await?;
 
-    let score = path_count as usize;
+    let score = path_count.unwrap_or(0) as usize;
     info!(
         "Found {} paths of length 2 from {} to {} - second-degree score: {}",
-        path_count, emitter_user_id, sensor_user_id, score
+        score, emitter_user_id, sensor_user_id, score
     );
 
     Ok(score)
@@ -1061,30 +1068,22 @@ pub async fn get_vibe_score_three(
         sensor_user_id, emitter_user_id
     );
 
-    let path_count: i64 = sqlx::query_scalar(
+    let path_count: Option<i64> = sqlx::query_scalar(
         r#"
-        SELECT COUNT(*) as path_count
-        FROM good_vibes g1
-        JOIN good_vibes g2 ON g1.sensor_id = g2.emitter_id
-        JOIN good_vibes g3 ON g2.sensor_id = g3.emitter_id
-        WHERE g1.emitter_id = $1 AND g3.sensor_id = $2
-          AND g1.emitter_id != g1.sensor_id
-          AND g1.emitter_id != g2.sensor_id
-          AND g1.emitter_id != g3.sensor_id
-          AND g1.sensor_id != g2.sensor_id
-          AND g1.sensor_id != g3.sensor_id
-          AND g2.sensor_id != g3.sensor_id
+        SELECT path_count
+        FROM view_good_vibes_degree_three
+        WHERE sensor_id = $1 AND emitter_id = $2
         "#,
     )
-    .bind(emitter_user_id)
     .bind(sensor_user_id)
-    .fetch_one(pool)
+    .bind(emitter_user_id)
+    .fetch_optional(pool)
     .await?;
 
-    let score = path_count as usize;
+    let score = path_count.unwrap_or(0) as usize;
     info!(
         "Found {} paths of length 3 from {} to {} - third-degree score: {}",
-        path_count, emitter_user_id, sensor_user_id, score
+        score, emitter_user_id, sensor_user_id, score
     );
 
     Ok(score)
