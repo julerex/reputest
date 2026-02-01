@@ -1,1 +1,1 @@
-git add all changes, git commit with concise message, git push, give me a paragraph about what changed
+git add all changes, git commit with concise message less than 32 characters, git push, give me a paragraph about what changed
