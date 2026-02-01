@@ -1323,8 +1323,10 @@ pub async fn get_all_good_vibes_degrees(
 
 /// Refreshes all materialized views and records timing metrics.
 ///
-/// This function refreshes each materialized view sequentially (degree 1-6, then combined view),
+/// This function calls the database function `refresh_all_materialized_views()` which
+/// refreshes each materialized view sequentially (degree 1-6, then combined view),
 /// measures the time taken for each refresh, and records the metrics in the `vibe_materialize_time` table.
+/// The database function uses SECURITY DEFINER to allow refreshing views owned by another role.
 ///
 /// # Parameters
 ///
@@ -1339,162 +1341,15 @@ pub async fn refresh_materialized_views(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     info!("Starting materialized view refresh");
 
-    // Refresh degree 1 view
-    {
-        let start = std::time::Instant::now();
-        info!("Refreshing view_good_vibes_degree_one");
-        sqlx::query("REFRESH MATERIALIZED VIEW view_good_vibes_degree_one")
-            .execute(pool)
-            .await?;
-        let elapsed_ms = start.elapsed().as_millis() as i32;
-        info!("Refreshed view_good_vibes_degree_one in {} ms", elapsed_ms);
-
-        sqlx::query(
-            r#"
-            INSERT INTO vibe_materialize_time (degree, refresh_time, time_taken_ms)
-            VALUES ($1, NOW(), $2)
-            "#,
-        )
-        .bind(1i32)
-        .bind(elapsed_ms)
+    let start = std::time::Instant::now();
+    
+    // Call the database function which handles all refreshes and timing metrics
+    sqlx::query("SELECT refresh_all_materialized_views()")
         .execute(pool)
         .await?;
-    }
-
-    // Refresh degree 2 view
-    {
-        let start = std::time::Instant::now();
-        info!("Refreshing view_good_vibes_degree_two");
-        sqlx::query("REFRESH MATERIALIZED VIEW view_good_vibes_degree_two")
-            .execute(pool)
-            .await?;
-        let elapsed_ms = start.elapsed().as_millis() as i32;
-        info!("Refreshed view_good_vibes_degree_two in {} ms", elapsed_ms);
-
-        sqlx::query(
-            r#"
-            INSERT INTO vibe_materialize_time (degree, refresh_time, time_taken_ms)
-            VALUES ($1, NOW(), $2)
-            "#,
-        )
-        .bind(2i32)
-        .bind(elapsed_ms)
-        .execute(pool)
-        .await?;
-    }
-
-    // Refresh degree 3 view
-    {
-        let start = std::time::Instant::now();
-        info!("Refreshing view_good_vibes_degree_three");
-        sqlx::query("REFRESH MATERIALIZED VIEW view_good_vibes_degree_three")
-            .execute(pool)
-            .await?;
-        let elapsed_ms = start.elapsed().as_millis() as i32;
-        info!(
-            "Refreshed view_good_vibes_degree_three in {} ms",
-            elapsed_ms
-        );
-
-        sqlx::query(
-            r#"
-            INSERT INTO vibe_materialize_time (degree, refresh_time, time_taken_ms)
-            VALUES ($1, NOW(), $2)
-            "#,
-        )
-        .bind(3i32)
-        .bind(elapsed_ms)
-        .execute(pool)
-        .await?;
-    }
-
-    // Refresh degree 4 view
-    {
-        let start = std::time::Instant::now();
-        info!("Refreshing view_good_vibes_degree_four");
-        sqlx::query("REFRESH MATERIALIZED VIEW view_good_vibes_degree_four")
-            .execute(pool)
-            .await?;
-        let elapsed_ms = start.elapsed().as_millis() as i32;
-        info!("Refreshed view_good_vibes_degree_four in {} ms", elapsed_ms);
-
-        sqlx::query(
-            r#"
-            INSERT INTO vibe_materialize_time (degree, refresh_time, time_taken_ms)
-            VALUES ($1, NOW(), $2)
-            "#,
-        )
-        .bind(4i32)
-        .bind(elapsed_ms)
-        .execute(pool)
-        .await?;
-    }
-
-    // Refresh degree 5 view
-    {
-        let start = std::time::Instant::now();
-        info!("Refreshing view_good_vibes_degree_five");
-        sqlx::query("REFRESH MATERIALIZED VIEW view_good_vibes_degree_five")
-            .execute(pool)
-            .await?;
-        let elapsed_ms = start.elapsed().as_millis() as i32;
-        info!("Refreshed view_good_vibes_degree_five in {} ms", elapsed_ms);
-
-        sqlx::query(
-            r#"
-            INSERT INTO vibe_materialize_time (degree, refresh_time, time_taken_ms)
-            VALUES ($1, NOW(), $2)
-            "#,
-        )
-        .bind(5i32)
-        .bind(elapsed_ms)
-        .execute(pool)
-        .await?;
-    }
-
-    // Refresh degree 6 view
-    {
-        let start = std::time::Instant::now();
-        info!("Refreshing view_good_vibes_degree_six");
-        sqlx::query("REFRESH MATERIALIZED VIEW view_good_vibes_degree_six")
-            .execute(pool)
-            .await?;
-        let elapsed_ms = start.elapsed().as_millis() as i32;
-        info!("Refreshed view_good_vibes_degree_six in {} ms", elapsed_ms);
-
-        sqlx::query(
-            r#"
-            INSERT INTO vibe_materialize_time (degree, refresh_time, time_taken_ms)
-            VALUES ($1, NOW(), $2)
-            "#,
-        )
-        .bind(6i32)
-        .bind(elapsed_ms)
-        .execute(pool)
-        .await?;
-    }
-
-    // Refresh combined view (record with degree=NULL)
-    {
-        let start = std::time::Instant::now();
-        info!("Refreshing view_all_good_vibes_degrees");
-        sqlx::query("REFRESH MATERIALIZED VIEW view_all_good_vibes_degrees")
-            .execute(pool)
-            .await?;
-        let elapsed_ms = start.elapsed().as_millis() as i32;
-        info!("Refreshed view_all_good_vibes_degrees in {} ms", elapsed_ms);
-
-        sqlx::query(
-            r#"
-            INSERT INTO vibe_materialize_time (degree, refresh_time, time_taken_ms)
-            VALUES (NULL, NOW(), $1)
-            "#,
-        )
-        .bind(elapsed_ms)
-        .execute(pool)
-        .await?;
-    }
-
-    info!("Completed materialized view refresh");
+    
+    let elapsed_ms = start.elapsed().as_millis();
+    info!("Completed materialized view refresh in {} ms", elapsed_ms);
+    
     Ok(())
 }
