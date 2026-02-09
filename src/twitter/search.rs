@@ -13,7 +13,9 @@ use crate::db;
 use crate::oauth::build_oauth2_user_context_header;
 
 use super::api::{lookup_user_by_username, make_authenticated_request};
-use super::parsing::{extract_mention_with_question, extract_vibe_emitter};
+use super::parsing::{
+    extract_megajoule_transfer, extract_mention_with_question, extract_vibe_emitter,
+};
 use super::tweets::reply_to_tweet;
 
 /// Processes a single page of tweet search results and saves good vibes data.
@@ -150,6 +152,179 @@ async fn process_search_results(
                             // Extract vibe_emitter from tweet text, excluding reply target if applicable
                             // Handles both "@username #gmgv" and "username #gmgv" formats
                             let tweet_text = text.as_str().unwrap_or("");
+
+                            // Check for megajoule transfer first
+                            if let Some((amount, receiver_username)) =
+                                extract_megajoule_transfer(tweet_text)
+                            {
+                                // Process megajoule transfer
+                                if let (
+                                    Some(poster_id),
+                                    Some(poster_username),
+                                    Some(poster_display_name),
+                                ) = (poster_user_id, poster_username, poster_name)
+                                {
+                                    info!(
+                                        "  Poster (megajoule sender): {} (@{})",
+                                        poster_display_name, poster_username
+                                    );
+                                    info!("  Receiver: @{}", receiver_username);
+                                    info!("  Amount: {}", amount);
+
+                                    // Look up receiver user ID (similar to how good vibes handles emitter lookup)
+                                    let receiver_user_info =
+                                        match crate::db::get_user_info_by_username(
+                                            pool,
+                                            &receiver_username,
+                                        )
+                                        .await
+                                        {
+                                            Ok(Some((user_id, name, created_at))) => {
+                                                // User found in database, use cached info
+                                                info!(
+                                                    "Using cached user info for @{} from database",
+                                                    receiver_username
+                                                );
+                                                Some((user_id, name, created_at))
+                                            }
+                                            Ok(None) => {
+                                                // User not in database, look up via Twitter API
+                                                info!("User @{} not found in database, looking up via Twitter API", receiver_username);
+                                                match lookup_user_by_username(
+                                                    config,
+                                                    pool,
+                                                    &receiver_username,
+                                                )
+                                                .await
+                                                {
+                                                    Ok(Some((user_id, name, created_at))) => {
+                                                        // Save the user data for future use
+                                                        if let Err(e) = crate::db::save_user(
+                                                            pool,
+                                                            &user_id,
+                                                            &receiver_username,
+                                                            &name,
+                                                            created_at,
+                                                        )
+                                                        .await
+                                                        {
+                                                            error!(
+                                                            "Failed to save receiver user data: {}",
+                                                            e
+                                                        );
+                                                        }
+                                                        Some((user_id, name, created_at))
+                                                    }
+                                                    Ok(None) => {
+                                                        warn!(
+                                                        "Receiver user {} not found via Twitter API",
+                                                        receiver_username
+                                                    );
+                                                        // Reply to let them know the user wasn't found
+                                                        let tweet_id = id.as_str().unwrap();
+                                                        let reply_text = format!(
+                                                        "I couldn't find a Twitter user with the handle '{}'. Please check the spelling and try again.",
+                                                        receiver_username
+                                                    );
+                                                        info!("Replying to tweet {} with user not found message: {}", tweet_id, reply_text);
+                                                        match reply_to_tweet(&reply_text, tweet_id)
+                                                            .await
+                                                        {
+                                                            Ok(response) => {
+                                                                info!("Successfully replied to tweet {}: {}", tweet_id, response);
+                                                            }
+                                                            Err(e) => {
+                                                                warn!(
+                                                                "Failed to reply to tweet {}: {}",
+                                                                tweet_id, e
+                                                            );
+                                                            }
+                                                        }
+                                                        None
+                                                    }
+                                                    Err(e) => {
+                                                        error!(
+                                                        "Failed to lookup receiver user {} via Twitter API: {}",
+                                                        receiver_username, e
+                                                    );
+                                                        None
+                                                    }
+                                                }
+                                            }
+                                            Err(e) => {
+                                                error!(
+                                                    "Failed to check database for user @{}: {}",
+                                                    receiver_username, e
+                                                );
+                                                None
+                                            }
+                                        };
+
+                                    // If we have receiver user info, save the megajoule transfer
+                                    if let Some((receiver_user_id, _, _)) = receiver_user_info {
+                                        // Check if this tweet has already been processed
+                                        match crate::db::has_megajoule_tweet(
+                                            pool,
+                                            id.as_str().unwrap(),
+                                        )
+                                        .await
+                                        {
+                                            Ok(true) => {
+                                                info!(
+                                                    "Skipping tweet {} from @{} sending {} megajoules to @{} (posted at {}) - already processed",
+                                                    id.as_str().unwrap(),
+                                                    poster_username,
+                                                    amount,
+                                                    receiver_username,
+                                                    created_at
+                                                );
+                                            }
+                                            Ok(false) => {
+                                                // Tweet not processed yet, save the megajoule transfer
+                                                if let Err(e) = crate::db::save_megajoule(
+                                                    pool,
+                                                    id.as_str().unwrap(), // tweet_id
+                                                    poster_id,            // sender_id
+                                                    &receiver_user_id,    // receiver_id
+                                                    amount,               // amount
+                                                    created_at,           // created_at from tweet
+                                                )
+                                                .await
+                                                {
+                                                    error!("Failed to save megajoule transfer (non-constraint error): {}", e);
+                                                } else {
+                                                    // Successfully saved megajoule transfer, now reply to the tweet confirming transfer was recorded
+                                                    let tweet_id = id.as_str().unwrap();
+                                                    let reply_text = format!(
+                                                        "Your {} megajoules to {} have been noted.",
+                                                        amount, receiver_username
+                                                    );
+                                                    info!("Replying to tweet {} with confirmation: {}", tweet_id, reply_text);
+                                                    match reply_to_tweet(&reply_text, tweet_id)
+                                                        .await
+                                                    {
+                                                        Ok(response) => {
+                                                            info!("Successfully replied to tweet {}: {}", tweet_id, response);
+                                                        }
+                                                        Err(e) => {
+                                                            warn!(
+                                                                "Failed to reply to tweet {}: {}",
+                                                                tweet_id, e
+                                                            );
+                                                            // Don't fail the entire process if replying fails - it's not critical
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            Err(e) => {
+                                                error!("Failed to check if tweet {} has been processed: {}", id.as_str().unwrap(), e);
+                                            }
+                                        }
+                                    }
+                                }
+                                continue; // Skip good vibes processing for megajoule tweets
+                            }
+
                             let vibe_emitter_username =
                                 extract_vibe_emitter(tweet_text, reply_target_username);
 

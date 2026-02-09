@@ -78,6 +78,19 @@ async fn process_hashtag_search() {
     }
 }
 
+/// Processes the scheduled search for #megajoules tweets
+async fn process_megajoule_search() {
+    info!("Starting scheduled search for #megajoules tweets");
+    match search_tweets_with_hashtag("megajoules").await {
+        Ok(_) => {
+            info!("Scheduled search for #megajoules tweets completed successfully");
+        }
+        Err(e) => {
+            error!("Scheduled search for #megajoules tweets failed: {}", e);
+        }
+    }
+}
+
 /// Processes scheduled checks for @reputest mentions and replies to vibe queries
 async fn process_mentions() {
     debug!("Starting scheduled check for @reputest mentions");
@@ -360,14 +373,15 @@ pub async fn start_gmgv_cronjob() -> Result<JobScheduler, Box<dyn std::error::Er
     sched
         .add(Job::new_async("0 0/5 * * * * *", |_uuid, _l| {
             Box::pin(async {
-                process_hashtag_search().await;
+                process_hashtag_search().await; // #gmgv
+                process_megajoule_search().await; // #megajoules
                 process_mentions().await;
                 process_materialized_view_refresh().await;
             })
         })?)
         .await?;
 
-    info!("Cronjob scheduler configured to search for #gmgv tweets, process vibe queries, and refresh materialized views every 5 minutes");
+    info!("Cronjob scheduler configured to search for #gmgv and #megajoules tweets, process vibe queries, and refresh materialized views every 5 minutes");
     Ok(sched)
 }
 

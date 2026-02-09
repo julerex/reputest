@@ -76,6 +76,33 @@ COMMENT ON COLUMN good_vibes.emitter_id IS 'User ID of the person sending good v
 COMMENT ON COLUMN good_vibes.sensor_id IS 'User ID of the person receiving good vibes (sensor)';
 COMMENT ON COLUMN good_vibes.created_at IS 'Timestamp when the tweet was created';
 
+-- Records of megajoule transfers: sender sends amount megajoules to receiver
+CREATE TABLE megajoule (
+    tweet_id   TEXT,                                    -- ID of the tweet containing the megajoules
+    sender_id  TEXT                      NOT NULL REFERENCES users(id),  -- User sending megajoules
+    receiver_id TEXT                     NOT NULL REFERENCES users(id),  -- User receiving megajoules
+    amount     INTEGER                   NOT NULL,      -- Amount of megajoules
+    is_accepted BOOLEAN                  NOT NULL DEFAULT FALSE,  -- Whether the transfer has been accepted (to be implemented later)
+    created_at TIMESTAMP WITH TIME ZONE  NOT NULL,      -- When the tweet was created
+    PRIMARY KEY (tweet_id)                              -- One record per tweet
+);
+
+COMMENT ON TABLE megajoule IS 'Records of megajoule transfers: sender sends amount megajoules to receiver';
+COMMENT ON COLUMN megajoule.tweet_id IS 'ID of the tweet containing the megajoules transfer';
+COMMENT ON COLUMN megajoule.sender_id IS 'User ID of the person sending megajoules';
+COMMENT ON COLUMN megajoule.receiver_id IS 'User ID of the person receiving megajoules';
+COMMENT ON COLUMN megajoule.amount IS 'Amount of megajoules transferred';
+COMMENT ON COLUMN megajoule.is_accepted IS 'Whether the megajoule transfer has been accepted (to be implemented later)';
+COMMENT ON COLUMN megajoule.created_at IS 'Timestamp when the tweet was created';
+
+CREATE INDEX idx_megajoule_sender_id ON megajoule(sender_id);
+CREATE INDEX idx_megajoule_receiver_id ON megajoule(receiver_id);
+CREATE INDEX idx_megajoule_created_at ON megajoule(created_at);
+
+COMMENT ON INDEX idx_megajoule_sender_id IS 'Index on sender_id column to speed up queries filtering by sender';
+COMMENT ON INDEX idx_megajoule_receiver_id IS 'Index on receiver_id column to speed up queries filtering by receiver';
+COMMENT ON INDEX idx_megajoule_created_at IS 'Index on created_at column to speed up time-based queries';
+
 -- Tracks which tweets have been processed for vibe requests
 CREATE TABLE vibe_requests (
     tweet_id TEXT PRIMARY KEY  -- Tweet ID that has been processed

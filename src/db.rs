@@ -1353,3 +1353,114 @@ pub async fn refresh_materialized_views(
 
     Ok(())
 }
+
+/// Stores a megajoule transfer in the database.
+///
+/// This function inserts information about a megajoule transfer into the
+/// megajoule table. It includes the tweet ID, sender user ID, receiver user ID,
+/// amount, and the timestamp when the megajoules were created.
+/// is_accepted defaults to false (acceptance logic to be implemented later).
+///
+/// # Parameters
+///
+/// - `pool`: A reference to the PostgreSQL connection pool
+/// - `tweet_id`: The ID of the tweet that contains the megajoule transfer
+/// - `sender_id`: The user ID of the person sending megajoules
+/// - `receiver_id`: The user ID of the person receiving megajoules
+/// - `amount`: The amount of megajoules transferred
+/// - `created_at`: The timestamp when the tweet was created
+///
+/// # Returns
+///
+/// - `Ok(())`: If the megajoule transfer was successfully stored
+/// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the insert fails
+pub async fn save_megajoule(
+    pool: &PgPool,
+    tweet_id: &str,
+    sender_id: &str,
+    receiver_id: &str,
+    amount: i32,
+    created_at: chrono::DateTime<chrono::Utc>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    info!(
+        "Storing megajoule transfer in database: tweet {} from {} to {} amount {} at {}",
+        tweet_id, sender_id, receiver_id, amount, created_at
+    );
+
+    match sqlx::query(
+        r#"
+        INSERT INTO megajoule (tweet_id, sender_id, receiver_id, amount, is_accepted, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        "#,
+    )
+    .bind(tweet_id)
+    .bind(sender_id)
+    .bind(receiver_id)
+    .bind(amount)
+    .bind(false) // is_accepted defaults to false
+    .bind(created_at)
+    .execute(pool)
+    .await
+    {
+        Ok(_) => {
+            info!("Successfully stored megajoule transfer in database");
+            Ok(())
+        }
+        Err(sqlx::Error::Database(db_err)) => {
+            // Check if this is a unique constraint violation (primary key)
+            if db_err.code() == Some("23505".into()) {
+                info!(
+                    "Skipping duplicate megajoule transfer: tweet {} (already exists)",
+                    tweet_id
+                );
+                Ok(())
+            } else {
+                Err(Box::new(sqlx::Error::Database(db_err)))
+            }
+        }
+        Err(e) => Err(Box::new(e)),
+    }
+}
+
+/// Checks if a tweet ID exists in the megajoule table.
+///
+/// This function queries the megajoule table to see if the given tweet_id
+/// has already been processed for megajoule transfers.
+///
+/// # Parameters
+///
+/// - `pool`: A reference to the PostgreSQL connection pool
+/// - `tweet_id`: The tweet ID to check
+///
+/// # Returns
+///
+/// - `Ok(true)`: If the tweet ID exists in the megajoule table
+/// - `Ok(false)`: If the tweet ID does not exist in the megajoule table
+/// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the query fails
+pub async fn has_megajoule_tweet(
+    pool: &PgPool,
+    tweet_id: &str,
+) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+    info!(
+        "Checking if tweet {} has already been processed for megajoules",
+        tweet_id
+    );
+
+    let exists: bool = sqlx::query_scalar(
+        r#"
+        SELECT EXISTS(
+            SELECT 1 FROM megajoule
+            WHERE tweet_id = $1
+        ) as exists
+        "#,
+    )
+    .bind(tweet_id)
+    .fetch_one(pool)
+    .await?;
+
+    info!(
+        "Megajoule tweet check result: {} (tweet: {})",
+        exists, tweet_id
+    );
+    Ok(exists)
+}

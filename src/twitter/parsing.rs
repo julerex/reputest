@@ -114,3 +114,41 @@ pub fn extract_mention_with_question(text: &str) -> Option<String> {
 
     None
 }
+
+/// Extracts megajoule transfer information from tweet text.
+/// Format: "Send INTEGER #megajoules to @username"
+/// Examples: "Send 100 #megajoules to @alice" ✓, "send 50 #megajoules to bob" ✓
+///
+/// # Parameters
+///
+/// - `text`: The tweet text to search for megajoule transfer
+///
+/// # Returns
+///
+/// - `Some((amount, receiver_username))`: The amount and receiver username if found
+/// - `None`: If no valid pattern is found or input exceeds maximum length
+pub(crate) fn extract_megajoule_transfer(text: &str) -> Option<(i32, String)> {
+    // SECURITY: Limit input length to prevent ReDoS attacks
+    if text.len() > MAX_INPUT_LENGTH {
+        log::warn!(
+            "Input text exceeds maximum length ({} > {}), rejecting",
+            text.len(),
+            MAX_INPUT_LENGTH
+        );
+        return None;
+    }
+
+    // Case-insensitive regex: "send" + INTEGER + "#megajoules" + "to" + @username
+    let re = regex::Regex::new(r"(?i)send\s+(\d+)\s+#megajoules\s+to\s+@?(\w{1,15})").ok()?;
+
+    if let Some(captures) = re.captures(text) {
+        if let (Some(amount_match), Some(username_match)) = (captures.get(1), captures.get(2)) {
+            if let Ok(amount) = amount_match.as_str().parse::<i32>() {
+                let username = username_match.as_str().to_string();
+                return Some((amount, username));
+            }
+        }
+    }
+
+    None
+}
