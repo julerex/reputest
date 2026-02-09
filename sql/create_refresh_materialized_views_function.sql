@@ -87,3 +87,7 @@ COMMENT ON FUNCTION refresh_all_materialized_views() IS
 'Refreshes all materialized views (degree 1-6 and combined view) and records timing metrics. '
 'Uses SECURITY DEFINER to allow the application user to refresh views owned by another role.';
 
+
+
+
+
