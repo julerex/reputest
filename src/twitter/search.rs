@@ -567,10 +567,10 @@ async fn process_search_results(
     Ok(next_token)
 }
 
-/// Searches for tweets with a specific hashtag in the past 6 hours and saves good vibes data.
+/// Searches for tweets with a specific hashtag in the past 24 hours and saves good vibes data.
 ///
 /// This function uses the Twitter API v2 search endpoint to find tweets containing
-/// the specified hashtag that were posted within the past 6 hours. It extracts vibe
+/// the specified hashtag that were posted within the past 24 hours. It extracts vibe
 /// emitter (poster) and vibe receiver (mentioned user) information and saves it
 /// to the database. It uses OAuth 2.0 User Context Access Token authentication for v2 endpoints.
 ///
@@ -630,16 +630,16 @@ pub async fn search_tweets_with_hashtag(
     debug!("Twitter config loaded successfully for search");
     let client = Client::new();
 
-    // Calculate the timestamp for 6 hours ago
-    let six_hours_ago = SystemTime::now()
+    // Calculate the timestamp for 24 hours ago
+    let twenty_four_hours_ago = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs()
-        - 21600; // 21600 seconds = 6 hours
+        - 86400; // 86400 seconds = 24 hours
 
     // Build the search query with hashtag and time filter
     let query = format!("#{}", hashtag);
-    let start_time = chrono::DateTime::from_timestamp(six_hours_ago as i64, 0)
+    let start_time = chrono::DateTime::from_timestamp(twenty_four_hours_ago as i64, 0)
         .unwrap()
         .format("%Y-%m-%dT%H:%M:%S.000Z");
 
@@ -672,7 +672,7 @@ pub async fn search_tweets_with_hashtag(
 
         info!("Search URL: {}", url);
         debug!("Search query: {}", query);
-        debug!("Start time (6 hours ago): {}", start_time);
+        debug!("Start time (24 hours ago): {}", start_time);
 
         // Log request details
         info!(
@@ -722,10 +722,10 @@ pub async fn search_tweets_with_hashtag(
     Ok(())
 }
 
-/// Searches for mentions of the reputest user in the past 6 hours and returns tweet information.
+/// Searches for mentions of the reputest user in the past 24 hours and returns tweet information.
 ///
 /// This function uses the Twitter API v2 search endpoint to find tweets that mention
-/// @reputest and were posted within the past 6 hours. It returns a vector of tuples containing
+/// @reputest and were posted within the past 24 hours. It returns a vector of tuples containing
 /// tweet ID, tweet text, author username, and optionally a mentioned user followed by "?".
 ///
 /// # Returns
@@ -742,7 +742,7 @@ pub async fn search_mentions() -> Result<
     Vec<(String, String, String, Option<String>, String)>,
     Box<dyn std::error::Error + Send + Sync>,
 > {
-    info!("Starting search for @reputest mentions in the past hour");
+    info!("Starting search for @reputest mentions in the past 24 hours");
 
     // Get database pool and load Twitter API credentials from database
     info!("Loading Twitter configuration from database for mentions search");
@@ -752,16 +752,16 @@ pub async fn search_mentions() -> Result<
 
     let client = Client::new();
 
-    // Calculate the timestamp for 6 hours ago
-    let six_hours_ago = SystemTime::now()
+    // Calculate the timestamp for 24 hours ago
+    let twenty_four_hours_ago = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs()
-        - 21600; // 21600 seconds = 6 hours
+        - 86400; // 86400 seconds = 24 hours
 
     // Build the search query for mentions of @reputest
     let query = "@reputest";
-    let start_time = chrono::DateTime::from_timestamp(six_hours_ago as i64, 0)
+    let start_time = chrono::DateTime::from_timestamp(twenty_four_hours_ago as i64, 0)
         .unwrap()
         .format("%Y-%m-%dT%H:%M:%S.000Z");
     let url = format!(
@@ -772,7 +772,7 @@ pub async fn search_mentions() -> Result<
 
     info!("Mentions search URL: {}", url);
     debug!("Search query: {}", query);
-    debug!("Start time (6 hours ago): {}", start_time);
+    debug!("Start time (24 hours ago): {}", start_time);
 
     // Build the Authorization header with OAuth 2.0 User Context Access Token
     debug!("Building OAuth 2.0 User Context authorization header for mentions search");
@@ -818,10 +818,10 @@ pub async fn search_mentions() -> Result<
     if let Some(data) = json_response.get("data") {
         if let Some(tweets) = data.as_array() {
             if tweets.is_empty() {
-                info!("No mentions of @reputest found in the past 6 hours");
+                info!("No mentions of @reputest found in the past 24 hours");
             } else {
                 info!(
-                    "Found {} mentions of @reputest in the past 6 hours:",
+                    "Found {} mentions of @reputest in the past 24 hours:",
                     tweets.len()
                 );
                 for (i, tweet) in tweets.iter().enumerate() {
@@ -858,10 +858,10 @@ pub async fn search_mentions() -> Result<
                 }
             }
         } else {
-            info!("No mentions of @reputest found in the past 6 hours");
+            info!("No mentions of @reputest found in the past 24 hours");
         }
     } else {
-        info!("No mentions of @reputest found in the past 6 hours");
+        info!("No mentions of @reputest found in the past 24 hours");
     }
 
     Ok(mentions)

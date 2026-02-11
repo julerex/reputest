@@ -3,11 +3,13 @@
 //! This module contains functionality for running scheduled tasks, specifically
 //! for searching Twitter for tweets with specific hashtags and processing vibe-related queries.
 
+use crate::config::TwitterConfig;
 use crate::db::{
     get_good_vibes_count, get_user_id_by_username, get_vibe_score_five, get_vibe_score_four,
     get_vibe_score_one, get_vibe_score_six, get_vibe_score_three, get_vibe_score_two,
-    has_vibe_request, refresh_materialized_views, save_vibe_request,
+    has_vibe_request, refresh_materialized_views, save_user, save_vibe_request,
 };
+use crate::twitter::lookup_user_by_username;
 use crate::twitter::{
     reply_to_tweet, sanitize_for_logging, search_mentions, search_tweets_with_hashtag,
 };
@@ -19,8 +21,8 @@ use tokio_cron_scheduler::{Job, JobScheduler};
 ///
 /// This function creates a new job scheduler and adds a job that runs every 5 minutes
 /// to perform three tasks:
-/// 1. Search for tweets containing the hashtag "gmgv" from the past 6 hours
-/// 2. Check for mentions of @reputest from the past 6 hours and reply to:
+/// 1. Search for tweets containing the hashtag "gmgv" from the past 24 hours
+/// 2. Check for mentions of @reputest from the past 24 hours and reply to:
 ///    - Specific vibe score queries (e.g., "@reputest @username?")
 ///    - General requests for the total vibes count (messages containing "vibecount")
 /// 3. Refresh all materialized views (degree 1-4 and combined view) and record timing metrics
@@ -112,11 +114,24 @@ async fn process_mentions() {
                 }
             };
 
+            // Twitter config for looking up users when the query author is not yet in the DB
+            let mut config = match TwitterConfig::from_env(&pool).await {
+                Ok(c) => c,
+                Err(e) => {
+                    error!(
+                        "Failed to load Twitter config for mentions processing: {}",
+                        e
+                    );
+                    return;
+                }
+            };
+
             // Reply to each mention
             for (tweet_id, tweet_text, author_username, mentioned_user, created_at) in mentions {
                 if let Some(mentioned_username) = mentioned_user {
                     process_vibe_query(
                         &pool,
+                        &mut config,
                         &tweet_id,
                         &tweet_text,
                         &author_username,
@@ -173,6 +188,7 @@ async fn process_materialized_view_refresh() {
 /// Processes a specific vibe score query (e.g., "@reputest @username?")
 async fn process_vibe_query(
     pool: &PgPool,
+    config: &mut TwitterConfig,
     tweet_id: &str,
     _tweet_text: &str,
     author_username: &str,
@@ -200,11 +216,44 @@ async fn process_vibe_query(
         }
     }
 
-    // Look up the mentioned user's ID from database
+    // Get the author's user ID first; if not in DB, look up via API, add them, then reply that they have no good vibes yet
+    let author_user_id = match crate::db::get_user_id_by_username(pool, author_username).await {
+        Ok(Some(id)) => id,
+        Ok(None) => {
+            if let Ok(Some((user_id, name, created_at_utc))) =
+                lookup_user_by_username(config, pool, author_username).await
+            {
+                if let Err(e) =
+                    save_user(pool, &user_id, author_username, &name, created_at_utc).await
+                {
+                    error!(
+                        "Failed to save author @{} to users table: {}",
+                        author_username, e
+                    );
+                }
+            }
+            reply_author_no_good_vibes(pool, tweet_id, author_username).await;
+            return;
+        }
+        Err(e) => {
+            error!("Failed to get user ID for @{}: {}", author_username, e);
+            return;
+        }
+    };
+
+    // Look up the mentioned user's ID from database; if not in DB, reply with same format and all zeros (no path)
     let mentioned_user_id = match get_user_id_by_username(pool, mentioned_username).await {
         Ok(Some(id)) => id,
         Ok(None) => {
-            reply_with_zero_score(pool, tweet_id, author_username, mentioned_username).await;
+            info!(
+                "Mentioned user @{} not in database, replying with all-zero vibe scores",
+                mentioned_username
+            );
+            let reply_text = format!(
+                "Your vibes for {} are:\n1st degree: 0\n2nd degree: 0\n3rd degree: 0\n4th degree: 0\n5th degree: 0\n6th degree: 0",
+                mentioned_username
+            );
+            send_reply_and_mark_processed(pool, &reply_text, tweet_id, author_username).await;
             return;
         }
         Err(e) => {
@@ -212,19 +261,6 @@ async fn process_vibe_query(
                 "Failed to lookup mentioned user @{}: {}",
                 mentioned_username, e
             );
-            return;
-        }
-    };
-
-    // Get the author's user ID
-    let author_user_id = match crate::db::get_user_id_by_username(pool, author_username).await {
-        Ok(Some(id)) => id,
-        Ok(None) => {
-            error!("Could not find user ID for author @{}", author_username);
-            return;
-        }
-        Err(e) => {
-            error!("Failed to get user ID for @{}: {}", author_username, e);
             return;
         }
     };
@@ -254,26 +290,20 @@ async fn process_vibe_query(
     }
 }
 
-/// Replies with a message for users not found in the database
-async fn reply_with_zero_score(
-    pool: &PgPool,
-    tweet_id: &str,
-    author_username: &str,
-    mentioned_username: &str,
-) {
+/// Replies when the query author is not in the good vibes graph (no #gmgv declarations).
+async fn reply_author_no_good_vibes(pool: &PgPool, tweet_id: &str, author_username: &str) {
     info!(
-        "Mentioned user @{} not found in database, returning 'no vibes' message",
-        mentioned_username
+        "Author @{} not in good vibes graph, replying with 'no good vibes yet'",
+        author_username
     );
-    let reply_text = format!("{} has no good vibes recorded yet.", mentioned_username);
+    let reply_text = "You have not declared any good vibes yet.";
 
-    match reply_to_tweet(&reply_text, tweet_id).await {
+    match reply_to_tweet(reply_text, tweet_id).await {
         Ok(_) => {
             info!(
-                "Successfully replied to vibe query from @{} (user not found)",
+                "Successfully replied to vibe query from @{} (author has no good vibes)",
                 author_username
             );
-            // Mark this tweet as processed
             if let Err(e) = save_vibe_request(pool, tweet_id).await {
                 error!("Failed to save vibe request for tweet {}: {}", tweet_id, e);
             }

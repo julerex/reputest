@@ -17,6 +17,6 @@ pub use tweets::reply_to_tweet;
 
 // Crate-internal re-exports (used by tests and other modules)
 #[allow(unused_imports)]
-pub(crate) use api::sanitize_for_logging;
+pub(crate) use api::{lookup_user_by_username, sanitize_for_logging};
 #[allow(unused_imports)]
 pub(crate) use parsing::extract_vibe_emitter;
