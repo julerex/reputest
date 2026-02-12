@@ -430,8 +430,11 @@ fn test_extract_mention_with_question() {
     assert_eq!(extract_mention_with_question("@reputest reputest?"), None);
 
     // Test cases with extra content before or after
-    // Content before @reputest should not match (must start with @reputest)
-    assert_eq!(extract_mention_with_question("Hey @reputest @user?"), None);
+    // Content before @reputest is now allowed (for replies)
+    assert_eq!(
+        extract_mention_with_question("Hey @reputest @user?"),
+        Some("user".to_string())
+    );
     // Content after the ? is now allowed (fixes issue where users add extra text)
     assert_eq!(
         extract_mention_with_question("@reputest @user? More text"),
