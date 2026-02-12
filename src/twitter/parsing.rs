@@ -65,10 +65,10 @@ pub(crate) fn extract_vibe_emitter(text: &str, exclude_username: Option<&str>) -
 
 /// Extracts a username from a tweet that specifically queries the bot in the format "@reputest username ?" or "@reputest @username ?".
 ///
-/// This function only matches the exact patterns where a tweet starts with "@reputest"
-/// followed by a username (with or without @) and ends with a question mark.
-/// This is much more restrictive than the previous implementation to avoid false positives.
-/// Common words and the bot's username are excluded to prevent false matches.
+/// This function matches patterns where a tweet starts with "@reputest"
+/// followed by whitespace, then a username (with or without @), optional whitespace, then "?".
+/// Additional content after the "?" is allowed. This is more restrictive than the previous implementation
+/// to avoid false positives. Common words and the bot's username are excluded to prevent false matches.
 ///
 /// # Parameters
 ///
@@ -91,7 +91,8 @@ pub fn extract_mention_with_question(text: &str) -> Option<String> {
 
     // Use regex to match only the specific patterns: "@reputest username ?" or "@reputest @username ?"
     // The pattern ensures the tweet starts with "@reputest" followed by whitespace, then username, optional whitespace, then "?"
-    let re = regex::Regex::new(r"^@reputest\s+(@?[a-zA-Z0-9_]{1,15})\s*\?$").ok()?;
+    // Note: We allow content after the "?" to handle cases where users add extra text
+    let re = regex::Regex::new(r"^@reputest\s+(@?[a-zA-Z0-9_]{1,15})\s*\?").ok()?;
 
     if let Some(captures) = re.captures(text) {
         if let Some(username_match) = captures.get(1) {

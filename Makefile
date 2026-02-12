@@ -89,6 +89,14 @@ fly-deploy: ## Deploy to Fly
 fly-status: ## Show Fly app status
 	fly status
 
+.PHONY: fly-logs
+fly-logs: ## Show Fly app logs (streaming)
+	fly logs
+
+.PHONY: fly-logs-recent
+fly-logs-recent: ## Show recent Fly app logs (non-streaming)
+	fly logs --no-tail
+
 .PHONY: fly-machines-list
 fly-machines-list: ## Show Fly machines list
 	fly machines list
