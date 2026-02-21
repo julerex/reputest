@@ -64,7 +64,7 @@ When running `cargo` (build, test, fmt, clippy) inside Cursor you may see:
 
 `error: unknown proxy name: 'Cursor-2.x-x86_64'; valid proxy names...`
 
-The **Makefile** (see test/format/clippy targets) works around this by running **`unset ARGV0 && cargo ...`** before invoking cargo. Prefer **`make test`**, **`make format`**, **`make clippy`** when in Cursor, or run `unset ARGV0 && cargo <subcommand>` so cargo uses the real toolchain instead of the Cursor proxy.
+The **Makefile** (see test/format/clippy targets) works around this by running **`unset ARGV0 && cargo ...`** before invoking cargo. Prefer **`make test`**, **`make format`**, **`make clippy`** when in Cursor, or run `unset ARGV0 && cargo <subcommand>` so cargo uses the real toolchain instead of the Cursor proxy. When validating changes (e.g. before committing), use **`make checkall`** to run tests, format, and clippy in one go.
 
 ## Useful references
 
