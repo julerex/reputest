@@ -219,7 +219,7 @@ pub(crate) async fn make_authenticated_request(
 ///
 /// # Returns
 ///
-/// - `Ok(Some((user_id, name, created_at)))`: User information if found
+/// - `Ok(Some((user_id, name, created_at, followers_count)))`: User information if found
 /// - `Ok(None)`: If user not found
 /// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the API request fails
 pub(crate) async fn lookup_user_by_username(
@@ -227,14 +227,14 @@ pub(crate) async fn lookup_user_by_username(
     pool: &PgPool,
     username: &str,
 ) -> Result<
-    Option<(String, String, chrono::DateTime<chrono::Utc>)>,
+    Option<(String, String, chrono::DateTime<chrono::Utc>, Option<i32>)>,
     Box<dyn std::error::Error + Send + Sync>,
 > {
     info!("Looking up user by username: {}", username);
 
     let client = Client::new();
     let url = format!(
-        "https://api.x.com/2/users/by/username/{}?user.fields=id,name,username,created_at",
+        "https://api.x.com/2/users/by/username/{}?user.fields=id,name,username,created_at,public_metrics",
         username
     );
 
@@ -251,11 +251,25 @@ pub(crate) async fn lookup_user_by_username(
             data.get("name").and_then(|v| v.as_str()),
             data.get("created_at").and_then(|v| v.as_str()),
         ) {
+            let followers_count = data
+                .get("public_metrics")
+                .and_then(|pm| pm.get("followers_count"))
+                .and_then(|v| v.as_i64())
+                .map(|n| n as i32);
+
             match chrono::DateTime::parse_from_rfc3339(created_at_str) {
                 Ok(dt) => {
                     let created_at_utc = dt.with_timezone(&chrono::Utc);
-                    info!("Found user {}: {} (@{})", id, name, username);
-                    return Ok(Some((id.to_string(), name.to_string(), created_at_utc)));
+                    info!(
+                        "Found user {}: {} (@{}), followers_count: {:?}",
+                        id, name, username, followers_count
+                    );
+                    return Ok(Some((
+                        id.to_string(),
+                        name.to_string(),
+                        created_at_utc,
+                        followers_count,
+                    )));
                 }
                 Err(e) => {
                     error!(

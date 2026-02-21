@@ -27,10 +27,10 @@ use crate::{
         save_user,
     },
     handlers::{
-        handle_health, handle_reputest_get, handle_reputest_post, handle_root, AppState,
-        OAuthCallbackQuery,
+        handle_following, handle_health, handle_reputest_get, handle_reputest_post, handle_root,
+        AppState, OAuthCallbackQuery,
     },
-    twitter::{extract_mention_with_question, extract_vibe_emitter},
+    twitter::{extract_mention_with_following, extract_mention_with_question, extract_vibe_emitter},
 };
 use axum::{
     body::Body,
@@ -69,6 +69,7 @@ fn create_test_app(pool: PgPool) -> Router {
 
     Router::new()
         .route("/", get(handle_root))
+        .route("/following", get(handle_following))
         .route("/reputest", get(handle_reputest_get))
         .route("/reputest", post(handle_reputest_post))
         .route("/health", get(handle_health))
@@ -442,6 +443,26 @@ fn test_extract_mention_with_question() {
     );
 }
 
+/// Unit test for the extract_mention_with_following function.
+#[test]
+fn test_extract_mention_with_following() {
+    assert_eq!(
+        extract_mention_with_following("@reputest @callanable following?"),
+        Some("callanable".to_string())
+    );
+    assert_eq!(
+        extract_mention_with_following("@reputest user following?"),
+        Some("user".to_string())
+    );
+    assert_eq!(
+        extract_mention_with_following("Hey @reputest @alice following?"),
+        Some("alice".to_string())
+    );
+    assert_eq!(extract_mention_with_following("@reputest @user?"), None);
+    assert_eq!(extract_mention_with_following("@reputest following?"), None);
+    assert_eq!(extract_mention_with_following("@reputest reputest following?"), None);
+}
+
 /// Unit test for the extract_vibe_emitter function.
 ///
 /// This test verifies that the function extracts the word immediately before #gmgv,
@@ -573,25 +594,25 @@ async fn test_pagerank_vibe_scoring() {
     let david_id = "david_test_999";
 
     // Save test users
-    save_user(&pool, alice_id, "alice", "Alice Test", now)
+    save_user(&pool, alice_id, "alice", "Alice Test", now, None)
         .await
         .unwrap();
-    save_user(&pool, bob_id, "bob", "Bob Test", now)
+    save_user(&pool, bob_id, "bob", "Bob Test", now, None)
         .await
         .unwrap();
-    save_user(&pool, charlie_id, "charlie", "Charlie Test", now)
+    save_user(&pool, charlie_id, "charlie", "Charlie Test", now, None)
         .await
         .unwrap();
-    save_user(&pool, danielle_id, "danielle", "Danielle Test", now)
+    save_user(&pool, danielle_id, "danielle", "Danielle Test", now, None)
         .await
         .unwrap();
-    save_user(&pool, edgar_id, "edgar", "Edgar Test", now)
+    save_user(&pool, edgar_id, "edgar", "Edgar Test", now, None)
         .await
         .unwrap();
-    save_user(&pool, frank_id, "frank", "Frank Test", now)
+    save_user(&pool, frank_id, "frank", "Frank Test", now, None)
         .await
         .unwrap();
-    save_user(&pool, david_id, "david", "David Test", now)
+    save_user(&pool, david_id, "david", "David Test", now, None)
         .await
         .unwrap();
 

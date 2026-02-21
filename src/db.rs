@@ -445,6 +445,9 @@ pub async fn save_good_vibes(
 ///
 /// This function inserts or updates user information in the users table.
 /// It uses ON CONFLICT to handle cases where the user already exists.
+/// When `follower_count` is provided (e.g. from Twitter API public_metrics),
+/// it is used for both insert and update; otherwise the column default (0) is used
+/// on insert, and the existing value is preserved on update.
 ///
 /// # Parameters
 ///
@@ -453,6 +456,7 @@ pub async fn save_good_vibes(
 /// - `username`: The Twitter username
 /// - `name`: The Twitter display name
 /// - `created_at`: The timestamp when the user account was created
+/// - `follower_count`: Optional follower count from Twitter API public_metrics
 ///
 /// # Returns
 ///
@@ -464,26 +468,49 @@ pub async fn save_user(
     username: &str,
     name: &str,
     created_at: chrono::DateTime<chrono::Utc>,
+    follower_count: Option<i32>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     info!(
-        "Storing user data in database: {} (@{}) created at {}",
-        name, username, created_at
+        "Storing user data in database: {} (@{}) created at {}, follower_count: {:?}",
+        name, username, created_at, follower_count
     );
 
-    sqlx::query(
-        r#"
-        INSERT INTO users (id, username, name, created_at)
-        VALUES ($1, $2, $3, $4)
-        ON CONFLICT (id) DO UPDATE SET
-            username = EXCLUDED.username,
-            name = EXCLUDED.name,
-            created_at = EXCLUDED.created_at
-        "#,
-    )
-    .bind(user_id)
-    .bind(username)
-    .bind(name)
-    .bind(created_at)
+    match follower_count {
+        Some(count) => {
+            sqlx::query(
+                r#"
+                INSERT INTO users (id, username, name, created_at, follower_count)
+                VALUES ($1, $2, $3, $4, $5)
+                ON CONFLICT (id) DO UPDATE SET
+                    username = EXCLUDED.username,
+                    name = EXCLUDED.name,
+                    created_at = EXCLUDED.created_at,
+                    follower_count = EXCLUDED.follower_count
+                "#,
+            )
+            .bind(user_id)
+            .bind(username)
+            .bind(name)
+            .bind(created_at)
+            .bind(count)
+        }
+        None => {
+            sqlx::query(
+                r#"
+                INSERT INTO users (id, username, name, created_at)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (id) DO UPDATE SET
+                    username = EXCLUDED.username,
+                    name = EXCLUDED.name,
+                    created_at = EXCLUDED.created_at
+                "#,
+            )
+            .bind(user_id)
+            .bind(username)
+            .bind(name)
+            .bind(created_at)
+        }
+    }
     .execute(pool)
     .await?;
 
@@ -1463,4 +1490,83 @@ pub async fn has_megajoule_tweet(
         exists, tweet_id
     );
     Ok(exists)
+}
+
+/// Stores a following relationship in the database.
+///
+/// Inserts a row into the following table. On conflict (follower, followed), does nothing.
+/// Returns true if a new row was inserted, false if it already existed.
+pub async fn save_following(
+    pool: &PgPool,
+    follower_id: &str,
+    followed_id: &str,
+    created_at: chrono::DateTime<chrono::Utc>,
+) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+    let result = sqlx::query(
+        r#"
+        INSERT INTO following (follower, followed, created_at)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (follower, followed) DO NOTHING
+        "#,
+    )
+    .bind(follower_id)
+    .bind(followed_id)
+    .bind(created_at)
+    .execute(pool)
+    .await?;
+
+    Ok(result.rows_affected() > 0)
+}
+
+/// Increments the follower_count for a user (when they appear as followed).
+pub async fn increment_follower_count(
+    pool: &PgPool,
+    user_id: &str,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    sqlx::query(
+        r#"
+        UPDATE users SET follower_count = follower_count + 1 WHERE id = $1
+        "#,
+    )
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Row for the following page display.
+#[derive(Debug)]
+pub struct FollowingRow {
+    pub follower_username: String,
+    pub followed_username: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// Retrieves all following relationships with usernames for the /following page.
+pub async fn get_all_following(
+    pool: &PgPool,
+) -> Result<Vec<FollowingRow>, Box<dyn std::error::Error + Send + Sync>> {
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            follower_u.username AS follower_username,
+            followed_u.username AS followed_username,
+            f.created_at
+        FROM following f
+        JOIN users follower_u ON f.follower = follower_u.id
+        JOIN users followed_u ON f.followed = followed_u.id
+        ORDER BY f.created_at DESC
+        "#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| FollowingRow {
+            follower_username: row.get("follower_username"),
+            followed_username: row.get("followed_username"),
+            created_at: row.get("created_at"),
+        })
+        .collect())
 }

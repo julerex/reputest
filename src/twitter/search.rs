@@ -81,6 +81,7 @@ async fn process_search_results(
                                         username_str,
                                         name_str,
                                         created_at_utc,
+                                        None,
                                     )
                                     .await
                                     {
@@ -197,7 +198,7 @@ async fn process_search_results(
                                                 )
                                                 .await
                                                 {
-                                                    Ok(Some((user_id, name, created_at))) => {
+                                                    Ok(Some((user_id, name, created_at, follower_count))) => {
                                                         // Save the user data for future use
                                                         if let Err(e) = crate::db::save_user(
                                                             pool,
@@ -205,6 +206,7 @@ async fn process_search_results(
                                                             &receiver_username,
                                                             &name,
                                                             created_at,
+                                                            follower_count,
                                                         )
                                                         .await
                                                         {
@@ -366,7 +368,7 @@ async fn process_search_results(
                                             )
                                             .await
                                             {
-                                                Ok(Some((user_id, name, created_at))) => {
+                                                Ok(Some((user_id, name, created_at, follower_count))) => {
                                                     // Save the user data for future use
                                                     if let Err(e) = crate::db::save_user(
                                                         pool,
@@ -374,6 +376,7 @@ async fn process_search_results(
                                                         vibe_emitter_username,
                                                         &name,
                                                         created_at,
+                                                        follower_count,
                                                     )
                                                     .await
                                                     {

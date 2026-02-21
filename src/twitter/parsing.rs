@@ -119,6 +119,81 @@ pub fn extract_mention_with_question(text: &str) -> Option<String> {
     None
 }
 
+/// Extracts a username from a tweet that queries the bot for following list: "@reputest @username following?".
+///
+/// Matches patterns where "@reputest" appears, followed by whitespace, a username (with or without @),
+/// whitespace, then "following?". Precedence: use this before extract_mention_with_question when classifying.
+///
+/// # Parameters
+///
+/// - `text`: The tweet text to analyze
+///
+/// # Returns
+///
+/// - `Some(username)`: The username if found in the following-query format
+/// - `None`: If the tweet doesn't match or input exceeds maximum length
+pub fn extract_mention_with_following(text: &str) -> Option<String> {
+    if text.len() > MAX_INPUT_LENGTH {
+        log::warn!(
+            "Input text exceeds maximum length ({} > {}), rejecting",
+            text.len(),
+            MAX_INPUT_LENGTH
+        );
+        return None;
+    }
+
+    let re = regex::Regex::new(r"(?:^|\s)@reputest\s+(@?[a-zA-Z0-9_]{1,15})\s+following\?").ok()?;
+
+    if let Some(captures) = re.captures(text) {
+        if let Some(username_match) = captures.get(1) {
+            let username = username_match.as_str();
+            let clean_username = username.strip_prefix('@').unwrap_or(username);
+
+            let excluded_words = [
+                "what",
+                "when",
+                "where",
+                "how",
+                "why",
+                "who",
+                "which",
+                "the",
+                "a",
+                "an",
+                "is",
+                "are",
+                "was",
+                "were",
+                "be",
+                "been",
+                "being",
+                "have",
+                "has",
+                "had",
+                "do",
+                "does",
+                "did",
+                "will",
+                "would",
+                "could",
+                "should",
+                "can",
+                "may",
+                "might",
+                "must",
+                "shall",
+                "reputest",
+                "following",
+            ];
+            if !excluded_words.contains(&clean_username.to_lowercase().as_str()) {
+                return Some(clean_username.to_string());
+            }
+        }
+    }
+
+    None
+}
+
 /// Extracts megajoule transfer information from tweet text.
 /// Format: "Send INTEGER #megajoules to @username"
 /// Examples: "Send 100 #megajoules to @alice" ✓, "send 50 #megajoules to bob" ✓

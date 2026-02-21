@@ -7,11 +7,13 @@ use crate::config::TwitterConfig;
 use crate::db::{
     get_good_vibes_count, get_user_id_by_username, get_vibe_score_five, get_vibe_score_four,
     get_vibe_score_one, get_vibe_score_six, get_vibe_score_three, get_vibe_score_two,
-    has_vibe_request, refresh_materialized_views, save_user, save_vibe_request,
+    has_vibe_request, increment_follower_count, refresh_materialized_views, save_following,
+    save_user, save_vibe_request,
 };
 use crate::twitter::lookup_user_by_username;
 use crate::twitter::{
-    reply_to_tweet, sanitize_for_logging, search_mentions, search_tweets_with_hashtag,
+    extract_mention_with_following, fetch_user_following, reply_to_tweet, sanitize_for_logging,
+    search_mentions, search_tweets_with_hashtag,
 };
 use log::{debug, error, info};
 use sqlx::PgPool;
@@ -126,9 +128,20 @@ async fn process_mentions() {
                 }
             };
 
-            // Reply to each mention
+            // Process each mention (following query takes precedence over vibe query)
             for (tweet_id, tweet_text, author_username, mentioned_user, created_at) in mentions {
-                if let Some(mentioned_username) = mentioned_user {
+                if let Some(mentioned_username) = extract_mention_with_following(&tweet_text) {
+                    process_following_query(
+                        &pool,
+                        &mut config,
+                        &tweet_id,
+                        &tweet_text,
+                        &author_username,
+                        &mentioned_username,
+                        &created_at,
+                    )
+                    .await;
+                } else if let Some(mentioned_username) = mentioned_user {
                     process_vibe_query(
                         &pool,
                         &mut config,
@@ -149,7 +162,7 @@ async fn process_mentions() {
                     )
                     .await;
                 } else {
-                    info!("Skipping general mention from @{} at {} - no vibecount request or specific vibe query", author_username, created_at);
+                    info!("Skipping general mention from @{} at {} - no vibecount request or specific vibe/following query", author_username, created_at);
                 }
             }
 
@@ -220,11 +233,12 @@ async fn process_vibe_query(
     let author_user_id = match crate::db::get_user_id_by_username(pool, author_username).await {
         Ok(Some(id)) => id,
         Ok(None) => {
-            if let Ok(Some((user_id, name, created_at_utc))) =
+            if let Ok(Some((user_id, name, created_at_utc, follower_count))) =
                 lookup_user_by_username(config, pool, author_username).await
             {
                 if let Err(e) =
-                    save_user(pool, &user_id, author_username, &name, created_at_utc).await
+                    save_user(pool, &user_id, author_username, &name, created_at_utc, follower_count)
+                        .await
                 {
                     error!(
                         "Failed to save author @{} to users table: {}",
@@ -362,6 +376,121 @@ async fn process_vibecount_request(
             );
         }
     }
+}
+
+/// Processes a following query (e.g., "@reputest @username following?")
+async fn process_following_query(
+    pool: &PgPool,
+    config: &mut TwitterConfig,
+    tweet_id: &str,
+    _tweet_text: &str,
+    author_username: &str,
+    mentioned_username: &str,
+    _created_at: &str,
+) {
+    match has_vibe_request(pool, tweet_id).await {
+        Ok(true) => {
+            info!(
+                "Skipping following query tweet {} from @{} for @{} - already processed",
+                tweet_id, author_username, mentioned_username
+            );
+            return;
+        }
+        Ok(false) => {}
+        Err(e) => {
+            error!(
+                "Failed to check if tweet {} has been processed: {}",
+                tweet_id, e
+            );
+            return;
+        }
+    }
+
+    // Resolve username -> user_id (DB or API)
+    let follower_user_id = match get_user_id_by_username(pool, mentioned_username).await {
+        Ok(Some(id)) => id,
+        Ok(None) => {
+            if let Ok(Some((user_id, name, created_at_utc, follower_count))) =
+                lookup_user_by_username(config, pool, mentioned_username).await
+            {
+                if let Err(e) =
+                    save_user(pool, &user_id, mentioned_username, &name, created_at_utc, follower_count)
+                        .await
+                {
+                    error!(
+                        "Failed to save @{} to users table: {}",
+                        mentioned_username, e
+                    );
+                }
+                user_id
+            } else {
+                info!(
+                    "User @{} not found, skipping following query",
+                    mentioned_username
+                );
+                let reply_text = format!("User @{} not found.", mentioned_username);
+                send_reply_and_mark_processed(pool, &reply_text, tweet_id, author_username).await;
+                return;
+            }
+        }
+        Err(e) => {
+            error!("Failed to get user ID for @{}: {}", mentioned_username, e);
+            return;
+        }
+    };
+
+    // Fetch following list via API
+    let followed_users = match fetch_user_following(config, pool, &follower_user_id).await {
+        Ok(users) => users,
+        Err(e) => {
+            error!(
+                "Failed to fetch following list for @{}: {}",
+                mentioned_username, e
+            );
+            let reply_text = format!(
+                "Could not fetch @{}'s following list (account may be protected or suspended).",
+                mentioned_username
+            );
+            send_reply_and_mark_processed(pool, &reply_text, tweet_id, author_username).await;
+            return;
+        }
+    };
+
+    let now = chrono::Utc::now();
+    let mut new_count = 0u32;
+
+    for followed in &followed_users {
+        if followed.id == follower_user_id {
+            continue; // Skip self-follow
+        }
+        match save_following(pool, &follower_user_id, &followed.id, now).await {
+            Ok(inserted) => {
+                if inserted {
+                    new_count += 1;
+                    if let Err(e) = increment_follower_count(pool, &followed.id).await {
+                        error!(
+                            "Failed to increment follower_count for {}: {}",
+                            followed.id, e
+                        );
+                    }
+                }
+            }
+            Err(e) => {
+                error!(
+                    "Failed to save following {} -> {}: {}",
+                    follower_user_id, followed.id, e
+                );
+            }
+        }
+    }
+
+    let reply_text = format!(
+        "Fetched {} accounts @{} follows. {} new relationships stored.",
+        followed_users.len(),
+        mentioned_username,
+        new_count
+    );
+    send_reply_and_mark_processed(pool, &reply_text, tweet_id, author_username).await;
 }
 
 /// Sends a reply to a tweet and marks it as processed

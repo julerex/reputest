@@ -15,7 +15,8 @@ use sqlx::PgPool;
 
 use crate::config::get_allowed_username;
 use crate::db::{
-    create_session, delete_session, get_all_good_vibes_degrees, get_session_by_id, WebSession,
+    create_session, delete_session, get_all_following, get_all_good_vibes_degrees,
+    get_session_by_id, WebSession,
 };
 use crate::oauth::{
     build_authorization_url, exchange_authorization_code, generate_code_challenge,
@@ -163,10 +164,12 @@ pub async fn handle_root(
             text-align: right;
             font-variant-numeric: tabular-nums;
         }
+        nav a { margin-right: 16px; }
     </style>
 </head>
 <body>
     <div class="container">
+        <nav><a href="/">Good Vibes</a> <a href="/following">Following</a></nav>
         <h1>Good Vibes</h1>
         <table>
             <thead>
@@ -216,6 +219,90 @@ pub async fn handle_root(
         Err(e) => {
             // SECURITY: Log detailed error server-side but return generic message to client
             error!("Failed to query view_all_good_vibes_degrees: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "An internal error occurred. Please try again later.".to_string(),
+            ))
+        }
+    }
+}
+
+/// Handles GET requests to the /following endpoint.
+///
+/// Displays a table of following relationships (follower, followed, created_at).
+pub async fn handle_following(
+    State(state): State<AppState>,
+) -> Result<Html<String>, (StatusCode, String)> {
+    match get_all_following(&state.pool).await {
+        Ok(rows) => {
+            let mut html = String::from(
+                r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reputest - Following</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 { color: #333; margin-top: 0; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: #f8f9fa; font-weight: 600; color: #555; }
+        tr:hover { background-color: #f8f9fa; }
+        nav a { margin-right: 16px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <nav><a href="/">Good Vibes</a> <a href="/following">Following</a></nav>
+        <h1>Following</h1>
+        <table>
+            <thead>
+                <tr>
+                    <th>follower</th>
+                    <th>followed</th>
+                    <th>created_at</th>
+                </tr>
+            </thead>
+            <tbody>
+"#,
+            );
+
+            for row in rows {
+                let created_at = row.created_at.format("%Y-%m-%d %H:%M:%S UTC").to_string();
+                html.push_str(&format!(
+                    "                <tr>\n                    <td>{}</td>\n                    <td>{}</td>\n                    <td>{}</td>\n                </tr>\n",
+                    html_escape(&row.follower_username),
+                    html_escape(&row.followed_username),
+                    html_escape(&created_at)
+                ));
+            }
+
+            html.push_str(
+                r#"            </tbody>
+        </table>
+    </div>
+</body>
+</html>"#,
+            );
+
+            Ok(Html(html))
+        }
+        Err(e) => {
+            error!("Failed to query following: {}", e);
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "An internal error occurred. Please try again later.".to_string(),

@@ -48,13 +48,15 @@ COMMENT ON INDEX idx_sessions_expires_at IS 'Speed up cleanup of expired session
 
 -- Twitter users who have given or received good vibes
 CREATE TABLE users (
-    id         TEXT                      PRIMARY KEY,  -- Twitter user ID (used as primary key)
-    username   TEXT                      NOT NULL,     -- Twitter username/handle
-    name       TEXT                      NOT NULL,     -- Twitter display name
-    created_at TIMESTAMP WITH TIME ZONE  NOT NULL      -- When the Twitter account was created
+    id             TEXT                      PRIMARY KEY,  -- Twitter user ID (used as primary key)
+    username       TEXT                      NOT NULL,     -- Twitter username/handle
+    name           TEXT                      NOT NULL,     -- Twitter display name
+    created_at     TIMESTAMP WITH TIME ZONE  NOT NULL,     -- When the Twitter account was created
+    follower_count INTEGER                  NOT NULL DEFAULT 0  -- Number of accounts that follow this user
 );
 
 COMMENT ON TABLE users IS 'Twitter users who have given or received good vibes';
+COMMENT ON COLUMN users.follower_count IS 'Number of accounts that follow this user (from following table)';
 COMMENT ON COLUMN users.id IS 'Twitter user ID, used as primary key';
 COMMENT ON COLUMN users.username IS 'Twitter username/handle (e.g., @username)';
 COMMENT ON COLUMN users.name IS 'Twitter display name';
@@ -110,6 +112,25 @@ CREATE TABLE vibe_requests (
 
 COMMENT ON TABLE vibe_requests IS 'Tracks which tweets have been processed for vibe requests';
 COMMENT ON COLUMN vibe_requests.tweet_id IS 'Tweet ID that has been processed for vibe requests';
+
+-- Records of following relationships: follower follows followed
+CREATE TABLE following (
+    follower  TEXT                      NOT NULL REFERENCES users(id),
+    followed  TEXT                      NOT NULL REFERENCES users(id),
+    created_at TIMESTAMP WITH TIME ZONE  NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (follower, followed)
+);
+
+COMMENT ON TABLE following IS 'Records of following relationships: follower follows followed';
+COMMENT ON COLUMN following.follower IS 'User ID of the account doing the following (source)';
+COMMENT ON COLUMN following.followed IS 'User ID of the account being followed (target)';
+COMMENT ON COLUMN following.created_at IS 'When the relationship was first recorded';
+
+CREATE INDEX idx_following_follower ON following(follower);
+CREATE INDEX idx_following_followed ON following(followed);
+
+COMMENT ON INDEX idx_following_follower IS 'Index on follower column to speed up queries filtering by follower';
+COMMENT ON INDEX idx_following_followed IS 'Index on followed column to speed up queries filtering by followed';
 
 -- Tracks materialized view refresh performance
 CREATE TABLE vibe_materialize_time (

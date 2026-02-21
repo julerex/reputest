@@ -7,6 +7,7 @@ This file gives AI agents enough context to work effectively on the Reputest cod
 **Reputest** is a Rust web service that:
 
 - Monitors Twitter/X for **#gmgv** (Gives Me Good Vibes) tweets and builds a directed social graph.
+- Processes **@reputest @username following?** mentions: fetches who that user follows and stores in `following` table.
 - Exposes HTTP endpoints: Good Vibes dashboard, health check, **web login** (X OAuth 2.0), and an **API playground** (call X API v2 paths with the logged-in user’s token).
 - Uses a single **bot** token (from DB) for cronjobs and bot replies; **web sessions** (DB, encrypted) for login and playground.
 
@@ -29,8 +30,8 @@ This file gives AI agents enough context to work effectively on the Reputest cod
 | `src/db.rs` | DB: tokens (encrypted), sessions (web login), good vibes, vibe scores |
 | `src/crypto.rs` | Encrypt/decrypt tokens (AES-GCM), validate config |
 | `src/twitter/` | X API: search, tweets, user lookup, `make_authenticated_request` (uses bot token) |
-| `src/cronjob.rs` | GMGV hashtag cron, vibe-request handling |
-| `sql/database_ddl.sql` | Schema: refresh_tokens, access_tokens, **sessions**, users, good_vibes, views, indexes |
+| `src/cronjob.rs` | GMGV hashtag cron, vibe-request handling, **following-query** handling |
+| `sql/database_ddl.sql` | Schema: refresh_tokens, access_tokens, **sessions**, users, good_vibes, **following**, views, indexes |
 | `scripts/` | Binaries: `authorize_bot`, `refresh_access_token`, `encrypt_token` |
 
 ## Conventions
@@ -43,11 +44,11 @@ This file gives AI agents enough context to work effectively on the Reputest cod
 ## App state and routes
 
 - **State**: `AppState { pool: PgPool, base_url, oauth_client_id, oauth_client_secret }` (all optional except pool). Built in `main.rs` from env (`get_base_url().ok()`, `XAPI_CLIENT_ID`, `XAPI_CLIENT_SECRET`).
-- **Routes**: `/` (Good Vibes table), `/reputest` (GET: “Reputesting!” or OAuth callback when `?code=&state=` present; POST: “Reputesting!”), `/health`, `/login`, `/login/start`, `/playground` (GET/POST), `/logout`.
+- **Routes**: `/` (Good Vibes table), `/following` (following relationships table), `/reputest` (GET: “Reputesting!” or OAuth callback when `?code=&state=` present; POST: “Reputesting!”), `/health`, `/login`, `/login/start`, `/playground` (GET/POST), `/logout`.
 
 ## Database
 
-- **Schema**: Apply `sql/database_ddl.sql` (includes `sessions` for web login).
+- **Schema**: Apply `sql/database_ddl.sql` (includes `sessions` for web login). For existing DBs, run `sql/migrations/001_add_following.sql`.
 - **Tokens**: `access_tokens` and `refresh_tokens` store **encrypted** values; use `crypto::encrypt_token` / `decrypt_token`; require `TOKEN_ENCRYPTION_KEY` (32-byte hex).
 - **Sessions**: `sessions` table (id UUID, user_id, username, access_token, refresh_token encrypted, expires_at). Session ID is set in a cookie; validate and load via `db::get_session_by_id`.
 
