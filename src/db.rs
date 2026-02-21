@@ -476,9 +476,8 @@ pub async fn save_user(
     );
 
     match follower_count {
-        Some(count) => {
-            sqlx::query(
-                r#"
+        Some(count) => sqlx::query(
+            r#"
                 INSERT INTO users (id, username, name, created_at, follower_count)
                 VALUES ($1, $2, $3, $4, $5)
                 ON CONFLICT (id) DO UPDATE SET
@@ -487,16 +486,14 @@ pub async fn save_user(
                     created_at = EXCLUDED.created_at,
                     follower_count = EXCLUDED.follower_count
                 "#,
-            )
-            .bind(user_id)
-            .bind(username)
-            .bind(name)
-            .bind(created_at)
-            .bind(count)
-        }
-        None => {
-            sqlx::query(
-                r#"
+        )
+        .bind(user_id)
+        .bind(username)
+        .bind(name)
+        .bind(created_at)
+        .bind(count),
+        None => sqlx::query(
+            r#"
                 INSERT INTO users (id, username, name, created_at)
                 VALUES ($1, $2, $3, $4)
                 ON CONFLICT (id) DO UPDATE SET
@@ -504,12 +501,11 @@ pub async fn save_user(
                     name = EXCLUDED.name,
                     created_at = EXCLUDED.created_at
                 "#,
-            )
-            .bind(user_id)
-            .bind(username)
-            .bind(name)
-            .bind(created_at)
-        }
+        )
+        .bind(user_id)
+        .bind(username)
+        .bind(name)
+        .bind(created_at),
     }
     .execute(pool)
     .await?;

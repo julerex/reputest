@@ -198,7 +198,12 @@ async fn process_search_results(
                                                 )
                                                 .await
                                                 {
-                                                    Ok(Some((user_id, name, created_at, follower_count))) => {
+                                                    Ok(Some((
+                                                        user_id,
+                                                        name,
+                                                        created_at,
+                                                        follower_count,
+                                                    ))) => {
                                                         // Save the user data for future use
                                                         if let Err(e) = crate::db::save_user(
                                                             pool,
@@ -368,7 +373,12 @@ async fn process_search_results(
                                             )
                                             .await
                                             {
-                                                Ok(Some((user_id, name, created_at, follower_count))) => {
+                                                Ok(Some((
+                                                    user_id,
+                                                    name,
+                                                    created_at,
+                                                    follower_count,
+                                                ))) => {
                                                     // Save the user data for future use
                                                     if let Err(e) = crate::db::save_user(
                                                         pool,

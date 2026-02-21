@@ -236,9 +236,15 @@ async fn process_vibe_query(
             if let Ok(Some((user_id, name, created_at_utc, follower_count))) =
                 lookup_user_by_username(config, pool, author_username).await
             {
-                if let Err(e) =
-                    save_user(pool, &user_id, author_username, &name, created_at_utc, follower_count)
-                        .await
+                if let Err(e) = save_user(
+                    pool,
+                    &user_id,
+                    author_username,
+                    &name,
+                    created_at_utc,
+                    follower_count,
+                )
+                .await
                 {
                     error!(
                         "Failed to save author @{} to users table: {}",
@@ -413,9 +419,15 @@ async fn process_following_query(
             if let Ok(Some((user_id, name, created_at_utc, follower_count))) =
                 lookup_user_by_username(config, pool, mentioned_username).await
             {
-                if let Err(e) =
-                    save_user(pool, &user_id, mentioned_username, &name, created_at_utc, follower_count)
-                        .await
+                if let Err(e) = save_user(
+                    pool,
+                    &user_id,
+                    mentioned_username,
+                    &name,
+                    created_at_utc,
+                    follower_count,
+                )
+                .await
                 {
                     error!(
                         "Failed to save @{} to users table: {}",

@@ -30,7 +30,9 @@ use crate::{
         handle_following, handle_health, handle_reputest_get, handle_reputest_post, handle_root,
         AppState, OAuthCallbackQuery,
     },
-    twitter::{extract_mention_with_following, extract_mention_with_question, extract_vibe_emitter},
+    twitter::{
+        extract_mention_with_following, extract_mention_with_question, extract_vibe_emitter,
+    },
 };
 use axum::{
     body::Body,
@@ -460,7 +462,10 @@ fn test_extract_mention_with_following() {
     );
     assert_eq!(extract_mention_with_following("@reputest @user?"), None);
     assert_eq!(extract_mention_with_following("@reputest following?"), None);
-    assert_eq!(extract_mention_with_following("@reputest reputest following?"), None);
+    assert_eq!(
+        extract_mention_with_following("@reputest reputest following?"),
+        None
+    );
 }
 
 /// Unit test for the extract_vibe_emitter function.
