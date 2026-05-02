@@ -150,17 +150,15 @@ pub(crate) async fn make_authenticated_request(
                     } else {
                         let error_text = retry_response.text().await?;
                         error!(
-                            "Operation '{}' failed after token refresh - Status: {}",
-                            operation_name, retry_status
-                        );
-                        debug!(
-                            "Error response for '{}': {}",
+                            "Operation '{}' failed after token refresh - Status: {}; body: {}",
                             operation_name,
-                            sanitize_for_logging(&error_text, 200)
+                            retry_status,
+                            sanitize_for_logging(&error_text, 1000)
                         );
                         return Err(format!(
-                            "Twitter API error after token refresh ({})",
-                            retry_status
+                            "Twitter API error after token refresh ({}): {}",
+                            retry_status,
+                            sanitize_for_logging(&error_text, 500)
                         )
                         .into());
                     }
@@ -193,15 +191,17 @@ pub(crate) async fn make_authenticated_request(
 
     // Handle other error status codes
     let error_text = response.text().await?;
-    error!("Operation '{}' failed - Status: {}", operation_name, status);
-    debug!(
-        "Error response for '{}': {}",
+    error!(
+        "Operation '{}' failed - Status: {}; body: {}",
         operation_name,
-        sanitize_for_logging(&error_text, 200)
+        status,
+        sanitize_for_logging(&error_text, 1000)
     );
     Err(format!(
-        "Twitter API error for operation '{}' ({})",
-        operation_name, status
+        "Twitter API error for operation '{}' ({}): {}",
+        operation_name,
+        status,
+        sanitize_for_logging(&error_text, 500)
     )
     .into())
 }
