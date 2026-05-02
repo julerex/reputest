@@ -470,14 +470,19 @@ pub async fn save_user(
     created_at: chrono::DateTime<chrono::Utc>,
     follower_count: Option<i32>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    info!(
-        "Storing user data in database: {} (@{}) created at {}, follower_count: {:?}",
+    debug!(
+        "Upserting user {} (@{}) created at {}, follower_count: {:?}",
         name, username, created_at, follower_count
     );
 
-    match follower_count {
-        Some(count) => sqlx::query(
-            r#"
+    // RETURNING (xmax = 0) AS inserted lets us distinguish insert vs update.
+    // The WHERE clause on the UPDATE branch makes the upsert a no-op (returns no row)
+    // when all of (username, name, created_at, follower_count) already match, which
+    // avoids touching the row and avoids verbose logs for the common steady-state case.
+    let row = match follower_count {
+        Some(count) => {
+            sqlx::query(
+                r#"
                 INSERT INTO users (id, username, name, created_at, follower_count)
                 VALUES ($1, $2, $3, $4, $5)
                 ON CONFLICT (id) DO UPDATE SET
@@ -485,32 +490,68 @@ pub async fn save_user(
                     name = EXCLUDED.name,
                     created_at = EXCLUDED.created_at,
                     follower_count = EXCLUDED.follower_count
+                WHERE users.username     IS DISTINCT FROM EXCLUDED.username
+                   OR users.name         IS DISTINCT FROM EXCLUDED.name
+                   OR users.created_at   IS DISTINCT FROM EXCLUDED.created_at
+                   OR users.follower_count IS DISTINCT FROM EXCLUDED.follower_count
+                RETURNING (xmax = 0) AS inserted
                 "#,
-        )
-        .bind(user_id)
-        .bind(username)
-        .bind(name)
-        .bind(created_at)
-        .bind(count),
-        None => sqlx::query(
-            r#"
+            )
+            .bind(user_id)
+            .bind(username)
+            .bind(name)
+            .bind(created_at)
+            .bind(count)
+            .fetch_optional(pool)
+            .await?
+        }
+        None => {
+            sqlx::query(
+                r#"
                 INSERT INTO users (id, username, name, created_at)
                 VALUES ($1, $2, $3, $4)
                 ON CONFLICT (id) DO UPDATE SET
                     username = EXCLUDED.username,
                     name = EXCLUDED.name,
                     created_at = EXCLUDED.created_at
+                WHERE users.username   IS DISTINCT FROM EXCLUDED.username
+                   OR users.name       IS DISTINCT FROM EXCLUDED.name
+                   OR users.created_at IS DISTINCT FROM EXCLUDED.created_at
+                RETURNING (xmax = 0) AS inserted
                 "#,
-        )
-        .bind(user_id)
-        .bind(username)
-        .bind(name)
-        .bind(created_at),
-    }
-    .execute(pool)
-    .await?;
+            )
+            .bind(user_id)
+            .bind(username)
+            .bind(name)
+            .bind(created_at)
+            .fetch_optional(pool)
+            .await?
+        }
+    };
 
-    info!("Successfully stored user data in database");
+    match row {
+        Some(r) => {
+            let inserted: bool = r.try_get("inserted").unwrap_or(false);
+            if inserted {
+                info!(
+                    "Inserted new user row: {} (@{}, id={}) created at {}, follower_count: {:?}",
+                    name, username, user_id, created_at, follower_count
+                );
+            } else {
+                info!(
+                    "Updated user row: {} (@{}, id={}) created at {}, follower_count: {:?}",
+                    name, username, user_id, created_at, follower_count
+                );
+            }
+        }
+        None => {
+            debug!(
+                "User row unchanged: {} (@{}, id={}) - skipped upsert",
+                name, username, user_id
+            );
+        }
+    }
+
     Ok(())
 }
 
