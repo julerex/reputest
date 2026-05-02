@@ -479,10 +479,22 @@ fn test_extract_megajoule_transfer() {
         extract_megajoule_transfer("  100 #megajoules to bob"),
         Some((100, "bob".to_string()))
     );
-    assert_eq!(extract_megajoule_transfer("Send 100 #megajoules to @bob"), None);
-    assert_eq!(extract_megajoule_transfer("send 99 #megajoules to bob"), None);
-    assert_eq!(extract_megajoule_transfer("please send 20 #megajoules to @alice"), None);
-    assert_eq!(extract_megajoule_transfer("hey 20 #megajoules to @alice"), None);
+    assert_eq!(
+        extract_megajoule_transfer("Send 100 #megajoules to @bob"),
+        None
+    );
+    assert_eq!(
+        extract_megajoule_transfer("send 99 #megajoules to bob"),
+        None
+    );
+    assert_eq!(
+        extract_megajoule_transfer("please send 20 #megajoules to @alice"),
+        None
+    );
+    assert_eq!(
+        extract_megajoule_transfer("hey 20 #megajoules to @alice"),
+        None
+    );
     assert_eq!(extract_megajoule_transfer("send "), None);
     assert_eq!(extract_megajoule_transfer("send20 #megajoules to @x"), None);
 }
