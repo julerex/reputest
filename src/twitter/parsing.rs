@@ -195,8 +195,11 @@ pub fn extract_mention_with_following(text: &str) -> Option<String> {
 }
 
 /// Extracts megajoule transfer information from tweet text.
-/// Format: "Send INTEGER #megajoules to @username"
-/// Examples: "Send 100 #megajoules to @alice" ✓, "send 50 #megajoules to bob" ✓
+///
+/// The transfer must start the tweet with optional leading whitespace, then the amount digits —
+/// no other characters may appear before the amount (including `send`).
+///
+/// Examples: `20 #megajoules to @alice` ✓, `  100 #megajoules to bob` ✓
 ///
 /// # Parameters
 ///
@@ -217,8 +220,8 @@ pub(crate) fn extract_megajoule_transfer(text: &str) -> Option<(i32, String)> {
         return None;
     }
 
-    // Case-insensitive regex: "send" + INTEGER + "#megajoules" + "to" + @username
-    let re = regex::Regex::new(r"(?i)send\s+(\d+)\s+#megajoules\s+to\s+@?(\w{1,15})").ok()?;
+    // Anchored: optional leading whitespace, then amount + "#megajoules" + "to" + @username
+    let re = regex::Regex::new(r"^\s*(\d+)\s+#megajoules\s+to\s+@?(\w{1,15})").ok()?;
 
     if let Some(captures) = re.captures(text) {
         if let (Some(amount_match), Some(username_match)) = (captures.get(1), captures.get(2)) {

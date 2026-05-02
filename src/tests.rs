@@ -31,7 +31,8 @@ use crate::{
         AppState, OAuthCallbackQuery,
     },
     twitter::{
-        extract_mention_with_following, extract_mention_with_question, extract_vibe_emitter,
+        extract_megajoule_transfer, extract_mention_with_following, extract_mention_with_question,
+        extract_vibe_emitter,
     },
 };
 use axum::{
@@ -466,6 +467,24 @@ fn test_extract_mention_with_following() {
         extract_mention_with_following("@reputest reputest following?"),
         None
     );
+}
+
+#[test]
+fn test_extract_megajoule_transfer() {
+    assert_eq!(
+        extract_megajoule_transfer("20 #megajoules to @alice"),
+        Some((20, "alice".to_string()))
+    );
+    assert_eq!(
+        extract_megajoule_transfer("  100 #megajoules to bob"),
+        Some((100, "bob".to_string()))
+    );
+    assert_eq!(extract_megajoule_transfer("Send 100 #megajoules to @bob"), None);
+    assert_eq!(extract_megajoule_transfer("send 99 #megajoules to bob"), None);
+    assert_eq!(extract_megajoule_transfer("please send 20 #megajoules to @alice"), None);
+    assert_eq!(extract_megajoule_transfer("hey 20 #megajoules to @alice"), None);
+    assert_eq!(extract_megajoule_transfer("send "), None);
+    assert_eq!(extract_megajoule_transfer("send20 #megajoules to @x"), None);
 }
 
 /// Unit test for the extract_vibe_emitter function.
