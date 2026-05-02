@@ -1406,7 +1406,7 @@ pub async fn save_megajoule(
     created_at: chrono::DateTime<chrono::Utc>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     info!(
-        "Storing megajoule transfer in database: tweet {} from {} to {} amount {} at {}",
+        "Megajoule INSERT executing: tweet_id={} sender_id={} receiver_id={} amount={} created_at={}",
         tweet_id, sender_id, receiver_id, amount, created_at
     );
 
@@ -1425,8 +1425,16 @@ pub async fn save_megajoule(
     .execute(pool)
     .await
     {
-        Ok(_) => {
-            info!("Successfully stored megajoule transfer in database");
+        Ok(result) => {
+            info!(
+                "Megajoule INSERT committed: tweet_id={} sender_id={} receiver_id={} amount={} created_at={} rows_affected={}",
+                tweet_id,
+                sender_id,
+                receiver_id,
+                amount,
+                created_at,
+                result.rows_affected()
+            );
             Ok(())
         }
         Err(sqlx::Error::Database(db_err)) => {

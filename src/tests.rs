@@ -481,22 +481,26 @@ fn test_extract_megajoule_transfer() {
     );
     assert_eq!(
         extract_megajoule_transfer("Send 100 #megajoules to @bob"),
-        None
-    );
-    assert_eq!(
-        extract_megajoule_transfer("send 99 #megajoules to bob"),
-        None
+        Some((100, "bob".to_string()))
     );
     assert_eq!(
         extract_megajoule_transfer("please send 20 #megajoules to @alice"),
-        None
+        Some((20, "alice".to_string()))
     );
     assert_eq!(
         extract_megajoule_transfer("hey 20 #megajoules to @alice"),
-        None
+        Some((20, "alice".to_string()))
     );
     assert_eq!(extract_megajoule_transfer("send "), None);
-    assert_eq!(extract_megajoule_transfer("send20 #megajoules to @x"), None);
+    assert_eq!(
+        extract_megajoule_transfer("send20 #megajoules to @x"),
+        Some((20, "x".to_string()))
+    );
+    assert_eq!(
+        extract_megajoule_transfer("10 #megajoules to @a extra 20 #megajoules to @b"),
+        Some((10, "a".to_string()))
+    );
+    assert_eq!(extract_megajoule_transfer("#megajoules to @alice"), None);
 }
 
 /// Unit test for the extract_vibe_emitter function.

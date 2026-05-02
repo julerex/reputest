@@ -288,20 +288,30 @@ async fn process_search_results(
                                             }
                                             Ok(false) => {
                                                 // Tweet not processed yet, save the megajoule transfer
+                                                let tweet_id = id.as_str().unwrap();
                                                 if let Err(e) = crate::db::save_megajoule(
                                                     pool,
-                                                    id.as_str().unwrap(), // tweet_id
-                                                    poster_id,            // sender_id
-                                                    &receiver_user_id,    // receiver_id
-                                                    amount,               // amount
-                                                    created_at,           // created_at from tweet
+                                                    tweet_id,
+                                                    poster_id,         // sender_id
+                                                    &receiver_user_id, // receiver_id
+                                                    amount,
+                                                    created_at,
                                                 )
                                                 .await
                                                 {
                                                     error!("Failed to save megajoule transfer (non-constraint error): {}", e);
                                                 } else {
+                                                    info!(
+                                                        "Megajoule row recorded from hashtag tweet {} (posted {}): sender @{} ({}) → receiver @{} ({}) amount {}",
+                                                        tweet_id,
+                                                        created_at,
+                                                        poster_username,
+                                                        poster_id,
+                                                        receiver_username,
+                                                        receiver_user_id,
+                                                        amount
+                                                    );
                                                     // Successfully saved megajoule transfer, now reply to the tweet confirming transfer was recorded
-                                                    let tweet_id = id.as_str().unwrap();
                                                     let reply_text = format!(
                                                         "Your {} megajoules to {} have been noted.",
                                                         amount, receiver_username
