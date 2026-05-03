@@ -505,8 +505,12 @@ fn test_extract_megajoule_transfer() {
 
 #[test]
 fn test_tweet_text_mentions_reputest() {
-    assert!(tweet_text_mentions_reputest("@reputest 10 #megajoules to @bob"));
-    assert!(tweet_text_mentions_reputest("Hey @reputest send 5 #megajoules to alice"));
+    assert!(tweet_text_mentions_reputest(
+        "@reputest 10 #megajoules to @bob"
+    ));
+    assert!(tweet_text_mentions_reputest(
+        "Hey @reputest send 5 #megajoules to alice"
+    ));
     assert!(tweet_text_mentions_reputest("@REPUTEST hi"));
     assert!(!tweet_text_mentions_reputest("10 #megajoules to @bob"));
     assert!(!tweet_text_mentions_reputest("prefix@reputest no"));
