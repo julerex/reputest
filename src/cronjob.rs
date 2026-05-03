@@ -552,7 +552,7 @@ pub async fn start_gmgv_cronjob() -> Result<JobScheduler, Box<dyn std::error::Er
         })?)
         .await?;
 
-    info!("Cronjob scheduler configured to search for #gmgv and #megajoules tweets, process vibe queries, and refresh materialized views every 5 minutes");
+    info!("Cronjob scheduler configured to search for #gmgv and #megajoules tweets (megajoules require @reputest), process vibe queries, and refresh materialized views every 5 minutes");
     Ok(sched)
 }
 

@@ -194,12 +194,32 @@ pub fn extract_mention_with_following(text: &str) -> Option<String> {
     None
 }
 
+/// Returns true if the tweet text mentions the reputest bot (`@reputest`), case-insensitive.
+///
+/// Requires `@reputest` at a word boundary, preceded by start-of-string or ASCII whitespace
+/// (same idea as other `@reputest` command parsers, so replies with leading text still match).
+pub(crate) fn tweet_text_mentions_reputest(text: &str) -> bool {
+    if text.len() > MAX_INPUT_LENGTH {
+        log::warn!(
+            "Input text exceeds maximum length ({} > {}), rejecting",
+            text.len(),
+            MAX_INPUT_LENGTH
+        );
+        return false;
+    }
+    let re = regex::Regex::new(r"(?i)(?:^|\s)@reputest\b").ok();
+    re.map(|r| r.is_match(text)).unwrap_or(false)
+}
+
 /// Extracts megajoule transfer information from tweet text.
 ///
 /// Matches the first occurrence of `INTEGER #megajoules to @username` (or `username` without `@`)
 /// anywhere in the string; arbitrary text may precede the amount.
 ///
 /// Examples: `20 #megajoules to @alice` ✓, `please send 50 #megajoules to bob` ✓
+///
+/// Megajoule transfers are only recorded when the tweet also mentions `@reputest`
+/// (see [`tweet_text_mentions_reputest`]); callers should enforce that separately.
 ///
 /// # Parameters
 ///

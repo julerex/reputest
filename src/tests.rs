@@ -32,7 +32,7 @@ use crate::{
     },
     twitter::{
         extract_megajoule_transfer, extract_mention_with_following, extract_mention_with_question,
-        extract_vibe_emitter,
+        extract_vibe_emitter, tweet_text_mentions_reputest,
     },
 };
 use axum::{
@@ -501,6 +501,15 @@ fn test_extract_megajoule_transfer() {
         Some((10, "a".to_string()))
     );
     assert_eq!(extract_megajoule_transfer("#megajoules to @alice"), None);
+}
+
+#[test]
+fn test_tweet_text_mentions_reputest() {
+    assert!(tweet_text_mentions_reputest("@reputest 10 #megajoules to @bob"));
+    assert!(tweet_text_mentions_reputest("Hey @reputest send 5 #megajoules to alice"));
+    assert!(tweet_text_mentions_reputest("@REPUTEST hi"));
+    assert!(!tweet_text_mentions_reputest("10 #megajoules to @bob"));
+    assert!(!tweet_text_mentions_reputest("prefix@reputest no"));
 }
 
 /// Unit test for the extract_vibe_emitter function.

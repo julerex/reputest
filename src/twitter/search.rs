@@ -15,6 +15,7 @@ use crate::oauth::build_oauth2_user_context_header;
 use super::api::{lookup_user_by_username, make_authenticated_request};
 use super::parsing::{
     extract_megajoule_transfer, extract_mention_with_question, extract_vibe_emitter,
+    tweet_text_mentions_reputest,
 };
 use super::tweets::reply_to_tweet;
 
@@ -154,10 +155,11 @@ async fn process_search_results(
                             // Handles both "@username #gmgv" and "username #gmgv" formats
                             let tweet_text = text.as_str().unwrap_or("");
 
-                            // Check for megajoule transfer first
-                            if let Some((amount, receiver_username)) =
-                                extract_megajoule_transfer(tweet_text)
-                            {
+                            // Megajoules only count when the tweet mentions @reputest (bot trigger)
+                            if tweet_text_mentions_reputest(tweet_text) {
+                                if let Some((amount, receiver_username)) =
+                                    extract_megajoule_transfer(tweet_text)
+                                {
                                 // Process megajoule transfer
                                 if let (
                                     Some(poster_id),
@@ -340,6 +342,7 @@ async fn process_search_results(
                                     }
                                 }
                                 continue; // Skip good vibes processing for megajoule tweets
+                                }
                             }
 
                             let vibe_emitter_username =
