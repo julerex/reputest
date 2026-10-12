@@ -31,8 +31,8 @@ use crate::{
         AppState, OAuthCallbackQuery,
     },
     twitter::{
-        extract_megajoule_transfer, extract_mention_with_following, extract_mention_with_question,
-        extract_vibe_emitter, tweet_text_mentions_reputest,
+        extract_megajoule_transfer, extract_mention_with_balance, extract_mention_with_following,
+        extract_mention_with_question, extract_vibe_emitter, tweet_text_mentions_reputest,
     },
 };
 use axum::{
@@ -465,6 +465,40 @@ fn test_extract_mention_with_following() {
     assert_eq!(extract_mention_with_following("@reputest following?"), None);
     assert_eq!(
         extract_mention_with_following("@reputest reputest following?"),
+        None
+    );
+}
+
+#[test]
+fn test_extract_mention_with_balance() {
+    assert_eq!(
+        extract_mention_with_balance("@reputest @alice balance"),
+        Some("alice".to_string())
+    );
+    assert_eq!(
+        extract_mention_with_balance("@reputest bob balance"),
+        Some("bob".to_string())
+    );
+    assert_eq!(
+        extract_mention_with_balance("Hey @reputest @alice balance"),
+        Some("alice".to_string())
+    );
+    assert_eq!(
+        extract_mention_with_balance("@reputest @alice balance?"),
+        Some("alice".to_string())
+    );
+    assert_eq!(
+        extract_mention_with_balance("@reputest @alice BALANCE"),
+        Some("alice".to_string())
+    );
+    assert_eq!(extract_mention_with_balance("@reputest @user?"), None);
+    assert_eq!(extract_mention_with_balance("@reputest balance"), None);
+    assert_eq!(
+        extract_mention_with_balance("@reputest reputest balance"),
+        None
+    );
+    assert_eq!(
+        extract_mention_with_balance("@reputest @alice following?"),
         None
     );
 }

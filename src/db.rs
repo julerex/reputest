@@ -1537,6 +1537,30 @@ pub async fn has_megajoule_tweet(
     Ok(exists)
 }
 
+/// Returns a user's megajoule balance: total received minus total sent.
+///
+/// Users with no megajoule rows have a balance of 0.
+pub async fn get_megajoule_balance(
+    pool: &PgPool,
+    user_id: &str,
+) -> Result<i64, Box<dyn std::error::Error + Send + Sync>> {
+    info!("Querying megajoule balance for user {}", user_id);
+
+    let balance: i64 = sqlx::query_scalar(
+        r#"
+        SELECT
+            COALESCE((SELECT SUM(amount) FROM megajoule WHERE receiver_id = $1), 0)
+            - COALESCE((SELECT SUM(amount) FROM megajoule WHERE sender_id = $1), 0)
+        "#,
+    )
+    .bind(user_id)
+    .fetch_one(pool)
+    .await?;
+
+    info!("Megajoule balance for user {}: {}", user_id, balance);
+    Ok(balance)
+}
+
 /// Stores a following relationship in the database.
 ///
 /// Inserts a row into the following table. On conflict (follower, followed), does nothing.
