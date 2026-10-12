@@ -138,6 +138,8 @@ Visit `http://localhost:3000` to see the Good Vibes dashboard.
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/` | Good Vibes dashboard — displays all relationships with degree paths |
+| `GET` | `/following` | Following relationships table |
+| `GET` | `/megajoules` | October 2026 US dollar prices per megajoule for electricity, fuels, and foods |
 | `GET` | `/login` | Login page — "Login with X" to start OAuth 2.0 web flow |
 | `GET` | `/login/start` | Starts OAuth flow (redirects to X) |
 | `GET` | `/oauth/callback` | OAuth callback — exchanges code for session |
@@ -226,6 +228,7 @@ reputest/
 │   ├── main.rs          # Server initialization, routes, middleware
 │   ├── config.rs        # Environment configuration
 │   ├── handlers.rs      # HTTP route handlers
+│   ├── megajoule_prices.rs # October 2026 USD/MJ snapshot for GET /megajoules
 │   ├── db.rs            # Database operations & graph queries
 │   ├── crypto.rs        # AES-256-GCM token encryption
 │   ├── cronjob.rs       # Scheduled Twitter monitoring

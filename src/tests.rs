@@ -27,8 +27,8 @@ use crate::{
         save_user,
     },
     handlers::{
-        handle_following, handle_health, handle_reputest_get, handle_reputest_post, handle_root,
-        AppState, OAuthCallbackQuery,
+        handle_following, handle_health, handle_megajoules, handle_reputest_get,
+        handle_reputest_post, handle_root, AppState, OAuthCallbackQuery,
     },
     twitter::{
         extract_megajoule_transfer, extract_mention_with_balance, extract_mention_with_following,
@@ -73,6 +73,7 @@ fn create_test_app(pool: PgPool) -> Router {
     Router::new()
         .route("/", get(handle_root))
         .route("/following", get(handle_following))
+        .route("/megajoules", get(handle_megajoules))
         .route("/reputest", get(handle_reputest_get))
         .route("/reputest", post(handle_reputest_post))
         .route("/health", get(handle_health))
@@ -191,6 +192,21 @@ async fn test_handle_health() {
 
     assert_eq!(json_response["status"], "healthy");
     assert_eq!(json_response["service"], "reputest");
+}
+
+/// Tests GET /megajoules without a database.
+#[tokio::test]
+async fn test_handle_megajoules() {
+    let Html(html) = handle_megajoules().await;
+    assert!(html.contains("<table>"));
+    assert!(html.contains("Megajoules"));
+    assert!(html.contains("electricity"));
+    assert!(html.contains("fuel"));
+    assert!(html.contains("food"));
+    assert!(html.contains("USD"));
+    assert!(html.contains("megajoule"));
+    assert!(html.contains("Good Vibes"));
+    assert!(html.contains("Following"));
 }
 
 /// Integration test for the root endpoint (GET /).
