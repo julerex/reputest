@@ -32,6 +32,7 @@ pub mod cronjob;
 pub mod crypto;
 pub mod db;
 pub mod handlers;
+pub mod megajoule_prices;
 pub mod oauth;
 pub mod twitter;
 
@@ -39,7 +40,9 @@ pub mod twitter;
 pub use config::{get_server_port, TwitterConfig};
 pub use cronjob::{run_gmgv_cronjob, start_gmgv_cronjob};
 pub use crypto::validate_encryption_config;
-pub use handlers::{handle_health, handle_reputest_get, handle_reputest_post, handle_root};
+pub use handlers::{
+    handle_health, handle_megajoules, handle_reputest_get, handle_reputest_post, handle_root,
+};
 pub use oauth::build_oauth2_user_context_header;
 pub use twitter::{search_mentions, MentionedTweet};
 

@@ -45,6 +45,7 @@ mod cronjob;
 mod crypto;
 mod db;
 mod handlers;
+mod megajoule_prices;
 mod oauth;
 mod twitter;
 
@@ -52,8 +53,8 @@ use config::get_server_port;
 use cronjob::start_gmgv_cronjob;
 use handlers::{
     handle_following, handle_health, handle_login, handle_login_start, handle_logout,
-    handle_playground_get, handle_playground_post, handle_reputest_get, handle_reputest_post,
-    handle_root, AppState,
+    handle_megajoules, handle_playground_get, handle_playground_post, handle_reputest_get,
+    handle_reputest_post, handle_root, AppState,
 };
 
 /// Main entry point for the reputest web service.
@@ -188,6 +189,7 @@ async fn main() {
     let app = Router::new()
         .route("/", get(handle_root))
         .route("/following", get(handle_following))
+        .route("/megajoules", get(handle_megajoules))
         .route("/reputest", get(handle_reputest_get))
         .route("/reputest", post(handle_reputest_post))
         .route("/health", get(handle_health))

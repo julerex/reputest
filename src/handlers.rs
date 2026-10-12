@@ -18,6 +18,7 @@ use crate::db::{
     create_session, delete_session, get_all_following, get_all_good_vibes_degrees,
     get_session_by_id, WebSession,
 };
+use crate::megajoule_prices::{format_usd_per_mj, megajoule_price_rows};
 use crate::oauth::{
     build_authorization_url, exchange_authorization_code, generate_code_challenge,
     generate_code_verifier, generate_oauth_state,
@@ -169,7 +170,7 @@ pub async fn handle_root(
 </head>
 <body>
     <div class="container">
-        <nav><a href="/">Good Vibes</a> <a href="/following">Following</a></nav>
+        <nav><a href="/">Good Vibes</a> <a href="/following">Following</a> <a href="/megajoules">Megajoules</a></nav>
         <h1>Good Vibes</h1>
         <table>
             <thead>
@@ -267,7 +268,7 @@ pub async fn handle_following(
 </head>
 <body>
     <div class="container">
-        <nav><a href="/">Good Vibes</a> <a href="/following">Following</a></nav>
+        <nav><a href="/">Good Vibes</a> <a href="/following">Following</a> <a href="/megajoules">Megajoules</a></nav>
         <h1>Following</h1>
         <table>
             <thead>
@@ -309,6 +310,83 @@ pub async fn handle_following(
             ))
         }
     }
+}
+
+/// Handles GET /megajoules: static October 2026 US dollar prices per megajoule.
+pub async fn handle_megajoules() -> Html<String> {
+    let mut html = String::from(
+        r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reputest - Megajoules</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 { color: #333; margin-top: 0; }
+        p { color: #555; line-height: 1.5; }
+        .footnote { color: #666; font-size: 0.9em; margin-top: 24px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: #f8f9fa; font-weight: 600; color: #555; }
+        tr:hover { background-color: #f8f9fa; }
+        .count { text-align: right; font-variant-numeric: tabular-nums; }
+        nav a { margin-right: 16px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <nav><a href="/">Good Vibes</a> <a href="/following">Following</a> <a href="/megajoules">Megajoules</a></nav>
+        <h1>Megajoules</h1>
+        <p>US dollars per megajoule as of October 2026. Electricity is household retail where possible. Fuels and foods use typical retail or wholesale prices as noted, converted from the published unit.</p>
+        <table>
+            <thead>
+                <tr>
+                    <th>category</th>
+                    <th>commodity</th>
+                    <th>region</th>
+                    <th class="count">USD per MJ</th>
+                    <th>note</th>
+                </tr>
+            </thead>
+            <tbody>
+"#,
+    );
+
+    for row in megajoule_price_rows() {
+        html.push_str(&format!(
+            "                <tr>\n                    <td>{}</td>\n                    <td>{}</td>\n                    <td>{}</td>\n                    <td class=\"count\">{}</td>\n                    <td>{}</td>\n                </tr>\n",
+            html_escape(row.category),
+            html_escape(row.commodity),
+            html_escape(row.region),
+            html_escape(&format_usd_per_mj(row.usd_per_mj)),
+            html_escape(&row.note),
+        ));
+    }
+
+    html.push_str(
+        r#"            </tbody>
+        </table>
+        <p class="footnote">Snapshot, not a live feed. Figures are converted from published retail or wholesale prices; calorific values are higher-heating-value or food-calorie conventions as noted. Electricity: USD/kWh ÷ 3.6. Liquid fuels: USD per litre ÷ MJ per litre. Foods: USD per kg ÷ (kcal/kg × 0.004184). Some food prices are the latest Bureau of Labor Statistics month (July 2026) when October 2026 averages were not yet published.</p>
+    </div>
+</body>
+</html>"#,
+    );
+
+    Html(html)
 }
 
 /// GET /login — Login page with "Login with X" link. If already logged in, redirect to /playground.
