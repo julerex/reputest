@@ -7,9 +7,10 @@
 /// Twitter's max tweet length is 280 characters, so 500 is generous.
 const MAX_INPUT_LENGTH: usize = 500;
 
-/// Extracts the vibe emitter username from tweet text where #gmgv directly follows.
-/// The word before #gmgv can optionally start with @ - it will be stripped if present.
-/// Examples: "@alice #gmgv" ✓, "alice #gmgv" ✓, "alice has #gmgv" ✗
+/// Extracts the vibe emitter username from tweet text where `gmgv` directly follows.
+/// The word before `gmgv` can optionally start with @ - it will be stripped if present.
+/// The `#` on `gmgv` is optional. Examples: "@alice #gmgv" ✓, "@alice gmgv" ✓,
+/// "alice has gmgv" ✗, "@reputest gmgv" ✗ (bot username is not an emitter).
 ///
 /// # Parameters
 ///
@@ -18,7 +19,7 @@ const MAX_INPUT_LENGTH: usize = 500;
 ///
 /// # Returns
 ///
-/// - `Some(username)`: The username before #gmgv (without @ prefix)
+/// - `Some(username)`: The username before gmgv (without @ prefix)
 /// - `None`: If no valid pattern is found or input exceeds maximum length
 pub(crate) fn extract_vibe_emitter(text: &str, exclude_username: Option<&str>) -> Option<String> {
     // SECURITY: Limit input length to prevent ReDoS attacks
@@ -39,12 +40,11 @@ pub(crate) fn extract_vibe_emitter(text: &str, exclude_username: Option<&str>) -
         "or", "if", "when", "where", "what", "who", "how", "why", "which", "to", "of", "in", "on",
         "at", "by", "up", "so", "as", "good", "vibes", "great", "awesome", "amazing", "love",
         "like", "really", "very", "much", "more", "just", "also", "too", "here", "there", "now",
-        "then", "out", "about",
+        "then", "out", "about", "reputest",
     ];
 
-    // Match optional @ followed by username, then optional whitespace, then #gmgv
-    // The pattern requires either start of string, whitespace, or @ before the username
-    let re = regex::Regex::new(r"(?:^|[\s@])@?(\w{1,15})\s*#gmgv").ok()?;
+    // Username immediately before #gmgv (hash optional spaces) or " gmgv" (space required without hash)
+    let re = regex::Regex::new(r"(?:^|[\s@])@?(\w{1,15})(?:\s*#gmgv|\s+gmgv)\b").ok()?;
 
     // Find captures and check each one
     for cap in re.captures_iter(text) {
@@ -213,13 +213,13 @@ pub(crate) fn tweet_text_mentions_reputest(text: &str) -> bool {
 
 /// Extracts megajoule transfer information from tweet text.
 ///
-/// Matches the first occurrence of `INTEGER #megajoules to @username` (or `username` without `@`)
-/// anywhere in the string; arbitrary text may precede the amount.
+/// Matches the first occurrence of `INTEGER megajoules to @username` (or `username` without `@`)
+/// anywhere in the string; the `#` on `megajoules` is optional. Arbitrary text may precede the amount.
 ///
-/// Examples: `20 #megajoules to @alice` ✓, `please send 50 #megajoules to bob` ✓
+/// Examples: `20 #megajoules to @alice` ✓, `please send 50 megajoules to bob` ✓
 ///
-/// Megajoule transfers are only recorded when the tweet also mentions `@reputest`
-/// (see [`tweet_text_mentions_reputest`]); callers should enforce that separately.
+/// Megajoule transfers are only recorded for tweets that mention `@reputest`
+/// (the mention search is the only ingestion path).
 ///
 /// # Parameters
 ///
@@ -240,8 +240,8 @@ pub(crate) fn extract_megajoule_transfer(text: &str) -> Option<(i32, String)> {
         return None;
     }
 
-    // First match: digits + "#megajoules" + "to" + username (Twitter handle rules)
-    let re = regex::Regex::new(r"(\d+)\s+#megajoules\s+to\s+@?(\w{1,15})").ok()?;
+    // First match: digits + optional "#" + "megajoules" + "to" + username (Twitter handle rules)
+    let re = regex::Regex::new(r"(\d+)\s+#?megajoules\s+to\s+@?(\w{1,15})\b").ok()?;
 
     if let Some(captures) = re.captures(text) {
         if let (Some(amount_match), Some(username_match)) = (captures.get(1), captures.get(2)) {

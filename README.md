@@ -24,11 +24,11 @@
 
 ## 🎯 What It Does
 
-The [`reputest`](https://x.com/reputest) bot monitors Twitter/X for **#gmgv** (Gives Me Good Vibes) hashtag tweets and builds a directed social graph of positive relationships. When someone tweets `@username #gmgv` (or `username #gmgv` for stealth mode 🤫), they're attesting to the good vibes they get from that X user, creating a connection in the reputation graph.
+The [`reputest`](https://x.com/reputest) bot monitors Twitter/X for tweets that tag **@reputest** and builds a directed social graph of positive relationships. When someone tweets `@reputest @username gmgv` (the `#` on `gmgv` is optional), they're attesting to the good vibes they get from that X user, creating a connection in the reputation graph.
 
 **Key Features:**
 
-- 🔍 **Hashtag Monitoring** — Automatically scans for #gmgv tweets every 5 minutes
+- 🔍 **Mention Monitoring** — Automatically scans for @reputest mentions every 30 seconds
 - 📊 **Multi-Degree Analysis** — Calculates 1st through 4th degree connection paths
 - 🤖 **Twitter Bot** — Users can query vibe scores by mentioning @reputest
 - 🔐 **Encrypted Token Storage** — AES-256-GCM encryption for all OAuth tokens
@@ -48,7 +48,7 @@ The [`reputest`](https://x.com/reputest) bot monitors Twitter/X for **#gmgv** (G
 *Arrows show attestations: who tweeted → who was mentioned*
 
 - **Emitter**: The person emitting good vibes (mentioned user)
-- **Sensor**: The person sensing/attesting to those vibes (author of the #gmgv tweet)
+- **Sensor**: The person sensing/attesting to those vibes (author of the @reputest gmgv tweet)
 
 ### Degree Paths
 

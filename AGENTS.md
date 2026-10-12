@@ -6,7 +6,7 @@ This file gives AI agents enough context to work effectively on the Reputest cod
 
 **Reputest** is a Rust web service that:
 
-- Monitors Twitter/X for **#gmgv** (Gives Me Good Vibes) tweets and builds a directed social graph.
+- Monitors Twitter/X for **@reputest** mentions every 30 seconds and builds a directed social graph. Good vibes (`gmgv`) and megajoule transfers work with or without the hashtag, but the tweet must tag the bot.
 - Processes **@reputest @username following?** mentions: fetches who that user follows and stores in `following` table.
 - Exposes HTTP endpoints: Good Vibes dashboard, health check, **web login** (X OAuth 2.0), and an **API playground** (call X API v2 paths with the logged-in user’s token).
 - Uses a single **bot** token (from DB) for cronjobs and bot replies; **web sessions** (DB, encrypted) for login and playground.
@@ -30,7 +30,7 @@ This file gives AI agents enough context to work effectively on the Reputest cod
 | `src/db.rs` | DB: tokens (encrypted), sessions (web login), good vibes, vibe scores |
 | `src/crypto.rs` | Encrypt/decrypt tokens (AES-GCM), validate config |
 | `src/twitter/` | X API: search, tweets, user lookup, `make_authenticated_request` (uses bot token) |
-| `src/cronjob.rs` | GMGV hashtag cron, vibe-request handling, **following-query** handling |
+| `src/cronjob.rs` | @reputest mention cron (30s), vibe-request handling, **following-query** handling |
 | `sql/database_ddl.sql` | Schema: refresh_tokens, access_tokens, **sessions**, users, good_vibes, **following**, views, indexes |
 | `scripts/` | Binaries: `authorize_bot`, `refresh_access_token`, `encrypt_token` |
 

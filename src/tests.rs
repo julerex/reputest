@@ -501,6 +501,18 @@ fn test_extract_megajoule_transfer() {
         Some((10, "a".to_string()))
     );
     assert_eq!(extract_megajoule_transfer("#megajoules to @alice"), None);
+    assert_eq!(
+        extract_megajoule_transfer("20 megajoules to @alice"),
+        Some((20, "alice".to_string()))
+    );
+    assert_eq!(
+        extract_megajoule_transfer("@reputest 20 megajoules to bob"),
+        Some((20, "bob".to_string()))
+    );
+    assert_eq!(
+        extract_megajoule_transfer("please send 50 megajoules to @alice"),
+        Some((50, "alice".to_string()))
+    );
 }
 
 #[test]
@@ -605,6 +617,23 @@ fn test_extract_vibe_emitter() {
         extract_vibe_emitter("sending vibes #gmgv", None),
         None // "vibes" is a common word
     );
+
+    // Hashless gmgv (space required without #)
+    assert_eq!(
+        extract_vibe_emitter("@alice gmgv", None),
+        Some("alice".to_string())
+    );
+    assert_eq!(
+        extract_vibe_emitter("@reputest @alice gmgv", None),
+        Some("alice".to_string())
+    );
+    assert_eq!(
+        extract_vibe_emitter("@reputest alice gmgv", None),
+        Some("alice".to_string())
+    );
+    assert_eq!(extract_vibe_emitter("@reputest gmgv", None), None);
+    assert_eq!(extract_vibe_emitter("@reputest #gmgv", None), None);
+    assert_eq!(extract_vibe_emitter("alicegmgv", None), None);
 }
 
 /// Integration test for the pagerank-style vibe scoring algorithm.

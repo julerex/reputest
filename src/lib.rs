@@ -41,7 +41,7 @@ pub use cronjob::{run_gmgv_cronjob, start_gmgv_cronjob};
 pub use crypto::validate_encryption_config;
 pub use handlers::{handle_health, handle_reputest_get, handle_reputest_post, handle_root};
 pub use oauth::build_oauth2_user_context_header;
-pub use twitter::search_tweets_with_hashtag;
+pub use twitter::{search_mentions, MentionedTweet};
 
 #[cfg(test)]
 mod tests;

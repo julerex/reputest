@@ -1,7 +1,7 @@
 //! Cronjob module for scheduled tasks.
 //!
-//! This module contains functionality for running scheduled tasks, specifically
-//! for searching Twitter for tweets with specific hashtags and processing vibe-related queries.
+//! This module searches Twitter for @reputest mentions and processes vibe-related
+//! commands, megajoule transfers, and good-vibes attestations.
 
 use crate::config::TwitterConfig;
 use crate::db::{
@@ -12,24 +12,24 @@ use crate::db::{
 };
 use crate::twitter::lookup_user_by_username;
 use crate::twitter::{
-    extract_mention_with_following, fetch_user_following, reply_to_tweet, sanitize_for_logging,
-    search_mentions, search_tweets_with_hashtag,
+    extract_megajoule_transfer, extract_mention_with_following, extract_mention_with_question,
+    extract_vibe_emitter, fetch_user_following, record_good_vibes, record_megajoule_transfer,
+    reply_to_tweet, sanitize_for_logging, search_mentions, tweet_text_mentions_reputest,
 };
 use log::{debug, error, info};
 use sqlx::PgPool;
 use tokio_cron_scheduler::{Job, JobScheduler};
 
-/// Starts the cronjob scheduler for searching tweets with hashtag "gmgv" and processing vibe queries every 5 minutes.
+/// Starts the cronjob scheduler for @reputest mentions every 30 seconds.
 ///
-/// This function creates a new job scheduler and adds a job that runs every 5 minutes
-/// to perform three tasks:
-/// 1. Search for tweets containing the hashtag "gmgv" from the past 24 hours
-/// 2. Check for mentions of @reputest from the past 24 hours and reply to:
-///    - Specific vibe score queries (e.g., "@reputest @username?")
-///    - General requests for the total vibes count (messages containing "vibecount")
-/// 3. Refresh all materialized views (degree 1-4 and combined view) and record timing metrics
-///
-/// The job will log all found tweets and mentions to the application logs.
+/// Each tick:
+/// 1. Searches for mentions of @reputest from the past 24 hours and handles:
+///    - Following queries (`@reputest @username following?`)
+///    - Megajoule transfers (`@reputest 20 megajoules to @alice`, `#` optional)
+///    - Good vibes (`@reputest @alice gmgv`, `#` optional)
+///    - Vibe score queries (`@reputest @username?`)
+///    - Total vibes count (messages containing `vibecount`)
+/// 2. Refreshes all materialized views and records timing metrics
 ///
 /// # Returns
 ///
@@ -38,14 +38,7 @@ use tokio_cron_scheduler::{Job, JobScheduler};
 ///
 /// # Job Schedule
 ///
-/// The job runs every 5 minutes using the cron expression "0 0/5 * * * * *"
-/// which means:
-/// - 0 seconds
-/// - Every 5 minutes (0/5)
-/// - Every hour
-/// - Every day
-/// - Every month
-/// - Every day of the week
+/// The job runs every 30 seconds using the cron expression "0/30 * * * * * *"
 ///
 /// # Example
 ///
@@ -69,33 +62,7 @@ use tokio_cron_scheduler::{Job, JobScheduler};
 /// - The cron expression is invalid
 /// - There's an error adding the job to the scheduler
 ///
-/// Processes the scheduled search for #gmgv tweets
-async fn process_hashtag_search() {
-    info!("Starting scheduled search for #gmgv tweets");
-    match search_tweets_with_hashtag("gmgv").await {
-        Ok(_) => {
-            info!("Scheduled search for #gmgv tweets completed successfully");
-        }
-        Err(e) => {
-            error!("Scheduled search for #gmgv tweets failed: {}", e);
-        }
-    }
-}
-
-/// Processes the scheduled search for #megajoules tweets
-async fn process_megajoule_search() {
-    info!("Starting scheduled search for #megajoules tweets");
-    match search_tweets_with_hashtag("megajoules").await {
-        Ok(_) => {
-            info!("Scheduled search for #megajoules tweets completed successfully");
-        }
-        Err(e) => {
-            error!("Scheduled search for #megajoules tweets failed: {}", e);
-        }
-    }
-}
-
-/// Processes scheduled checks for @reputest mentions and replies to vibe queries
+/// Processes scheduled checks for @reputest mentions
 async fn process_mentions() {
     debug!("Starting scheduled check for @reputest mentions");
     match search_mentions().await {
@@ -107,7 +74,6 @@ async fn process_mentions() {
 
             info!("Found {} mentions to reply to", mentions.len());
 
-            // Get the database pool for user lookups and vibe checks
             let pool = match crate::db::get_db_pool().await {
                 Ok(pool) => pool,
                 Err(e) => {
@@ -116,7 +82,6 @@ async fn process_mentions() {
                 }
             };
 
-            // Twitter config for looking up users when the query author is not yet in the DB
             let mut config = match TwitterConfig::from_env(&pool).await {
                 Ok(c) => c,
                 Err(e) => {
@@ -128,41 +93,72 @@ async fn process_mentions() {
                 }
             };
 
-            // Process each mention (following query takes precedence over vibe query)
-            for (tweet_id, tweet_text, author_username, mentioned_user, created_at) in mentions {
-                if let Some(mentioned_username) = extract_mention_with_following(&tweet_text) {
+            for mention in mentions {
+                if !tweet_text_mentions_reputest(&mention.tweet_text) {
+                    info!(
+                        "Skipping tweet {} from @{} - text does not mention @reputest",
+                        mention.tweet_id, mention.author_username
+                    );
+                    continue;
+                }
+
+                let created_at = mention.created_at.to_rfc3339();
+                if let Some(mentioned_username) =
+                    extract_mention_with_following(&mention.tweet_text)
+                {
                     process_following_query(
                         &pool,
                         &mut config,
-                        &tweet_id,
-                        &tweet_text,
-                        &author_username,
+                        &mention.tweet_id,
+                        &mention.tweet_text,
+                        &mention.author_username,
                         &mentioned_username,
                         &created_at,
                     )
                     .await;
-                } else if let Some(mentioned_username) = mentioned_user {
+                } else if let Some((amount, receiver_username)) =
+                    extract_megajoule_transfer(&mention.tweet_text)
+                {
+                    record_megajoule_transfer(
+                        &pool,
+                        &mut config,
+                        &mention,
+                        amount,
+                        &receiver_username,
+                    )
+                    .await;
+                } else if let Some(vibe_emitter_username) = extract_vibe_emitter(
+                    &mention.tweet_text,
+                    mention.reply_target_username.as_deref(),
+                ) {
+                    record_good_vibes(&pool, &mut config, &mention, &vibe_emitter_username).await;
+                } else if let Some(mentioned_username) =
+                    extract_mention_with_question(&mention.tweet_text)
+                {
                     process_vibe_query(
                         &pool,
                         &mut config,
-                        &tweet_id,
-                        &tweet_text,
-                        &author_username,
+                        &mention.tweet_id,
+                        &mention.tweet_text,
+                        &mention.author_username,
                         &mentioned_username,
                         &created_at,
                     )
                     .await;
-                } else if tweet_text.to_lowercase().contains("vibecount") {
+                } else if mention.tweet_text.to_lowercase().contains("vibecount") {
                     process_vibecount_request(
                         &pool,
-                        &tweet_id,
-                        &tweet_text,
-                        &author_username,
+                        &mention.tweet_id,
+                        &mention.tweet_text,
+                        &mention.author_username,
                         &created_at,
                     )
                     .await;
                 } else {
-                    info!("Skipping general mention from @{} at {} - no vibecount request or specific vibe/following query", author_username, created_at);
+                    info!(
+                        "Skipping general mention from @{} at {} - no vibecount request or specific vibe/following query",
+                        mention.author_username, created_at
+                    );
                 }
             }
 
@@ -540,27 +536,25 @@ pub async fn start_gmgv_cronjob() -> Result<JobScheduler, Box<dyn std::error::Er
 {
     let sched = JobScheduler::new().await?;
 
-    // Create a job that runs every 5 minutes
+    // Create a job that runs every 30 seconds
     sched
-        .add(Job::new_async("0 0/5 * * * * *", |_uuid, _l| {
+        .add(Job::new_async("0/30 * * * * * *", |_uuid, _l| {
             Box::pin(async {
-                process_hashtag_search().await; // #gmgv
-                process_megajoule_search().await; // #megajoules
                 process_mentions().await;
                 process_materialized_view_refresh().await;
             })
         })?)
         .await?;
 
-    info!("Cronjob scheduler configured to search for #gmgv and #megajoules tweets (megajoules require @reputest), process vibe queries, and refresh materialized views every 5 minutes");
+    info!("Cronjob scheduler configured to search @reputest mentions, process commands, and refresh materialized views every 30 seconds");
     Ok(sched)
 }
 
 /// Starts the cronjob scheduler and keeps it running.
 ///
-/// This is a convenience function that starts the GMGV hashtag search and mentions
-/// checking cronjob and keeps the scheduler running indefinitely. It handles graceful shutdown
-/// when receiving a Ctrl+C signal.
+/// This is a convenience function that starts the @reputest mention cronjob and keeps
+/// the scheduler running indefinitely. It handles graceful shutdown when receiving a
+/// Ctrl+C signal.
 ///
 /// # Returns
 ///

@@ -13,8 +13,8 @@ mod tweets;
 // Re-export public API
 #[allow(unused_imports)]
 pub use parsing::{extract_mention_with_following, extract_mention_with_question};
-pub use search::{search_mentions, search_tweets_with_hashtag};
-pub use tweets::reply_to_tweet;
+#[allow(unused_imports)]
+pub use search::{search_mentions, MentionedTweet};
 
 // Crate-internal re-exports (used by tests and other modules)
 #[allow(unused_imports)]
@@ -25,3 +25,6 @@ pub(crate) use following::fetch_user_following;
 pub(crate) use parsing::{
     extract_megajoule_transfer, extract_vibe_emitter, tweet_text_mentions_reputest,
 };
+#[allow(unused_imports)]
+pub(crate) use search::{record_good_vibes, record_megajoule_transfer};
+pub use tweets::reply_to_tweet;
