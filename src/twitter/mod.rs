@@ -12,7 +12,9 @@ mod tweets;
 
 // Re-export public API
 #[allow(unused_imports)]
-pub use parsing::{extract_mention_with_following, extract_mention_with_question};
+pub use parsing::{
+    extract_mention_with_balance, extract_mention_with_following, extract_mention_with_question,
+};
 #[allow(unused_imports)]
 pub use search::{search_mentions, MentionedTweet};
 

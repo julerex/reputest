@@ -5,16 +5,17 @@
 
 use crate::config::TwitterConfig;
 use crate::db::{
-    get_good_vibes_count, get_user_id_by_username, get_vibe_score_five, get_vibe_score_four,
-    get_vibe_score_one, get_vibe_score_six, get_vibe_score_three, get_vibe_score_two,
-    has_vibe_request, increment_follower_count, refresh_materialized_views, save_following,
-    save_user, save_vibe_request,
+    get_good_vibes_count, get_megajoule_balance, get_user_id_by_username, get_vibe_score_five,
+    get_vibe_score_four, get_vibe_score_one, get_vibe_score_six, get_vibe_score_three,
+    get_vibe_score_two, has_vibe_request, increment_follower_count, refresh_materialized_views,
+    save_following, save_user, save_vibe_request,
 };
 use crate::twitter::lookup_user_by_username;
 use crate::twitter::{
-    extract_megajoule_transfer, extract_mention_with_following, extract_mention_with_question,
-    extract_vibe_emitter, fetch_user_following, record_good_vibes, record_megajoule_transfer,
-    reply_to_tweet, sanitize_for_logging, search_mentions, tweet_text_mentions_reputest,
+    extract_megajoule_transfer, extract_mention_with_balance, extract_mention_with_following,
+    extract_mention_with_question, extract_vibe_emitter, fetch_user_following, record_good_vibes,
+    record_megajoule_transfer, reply_to_tweet, sanitize_for_logging, search_mentions,
+    tweet_text_mentions_reputest,
 };
 use log::{debug, error, info};
 use sqlx::PgPool;
@@ -25,6 +26,7 @@ use tokio_cron_scheduler::{Job, JobScheduler};
 /// Each tick:
 /// 1. Searches for mentions of @reputest from the past 24 hours and handles:
 ///    - Following queries (`@reputest @username following?`)
+///    - Megajoule balance queries (`@reputest @username balance`)
 ///    - Megajoule transfers (`@reputest 20 megajoules to @alice`, `#` optional)
 ///    - Good vibes (`@reputest @alice gmgv`, `#` optional)
 ///    - Vibe score queries (`@reputest @username?`)
@@ -111,6 +113,17 @@ async fn process_mentions() {
                         &mut config,
                         &mention.tweet_id,
                         &mention.tweet_text,
+                        &mention.author_username,
+                        &mentioned_username,
+                        &created_at,
+                    )
+                    .await;
+                } else if let Some(mentioned_username) =
+                    extract_mention_with_balance(&mention.tweet_text)
+                {
+                    process_balance_query(
+                        &pool,
+                        &mention.tweet_id,
                         &mention.author_username,
                         &mentioned_username,
                         &created_at,
@@ -375,6 +388,66 @@ async fn process_vibecount_request(
             error!(
                 "Failed to get good vibes count for vibecount request: {}",
                 e
+            );
+        }
+    }
+}
+
+/// Processes a megajoule balance query (e.g., "@reputest @username balance")
+async fn process_balance_query(
+    pool: &PgPool,
+    tweet_id: &str,
+    author_username: &str,
+    mentioned_username: &str,
+    created_at: &str,
+) {
+    match has_vibe_request(pool, tweet_id).await {
+        Ok(true) => {
+            info!(
+                "Skipping balance query tweet {} from @{} asking about @{} (posted at {}) - already processed",
+                tweet_id, author_username, mentioned_username, created_at
+            );
+            return;
+        }
+        Ok(false) => {}
+        Err(e) => {
+            error!(
+                "Failed to check if tweet {} has been processed: {}",
+                tweet_id, e
+            );
+            return;
+        }
+    }
+
+    let mentioned_user_id = match get_user_id_by_username(pool, mentioned_username).await {
+        Ok(Some(id)) => id,
+        Ok(None) => {
+            info!(
+                "Mentioned user @{} not in database, replying with megajoule balance 0",
+                mentioned_username
+            );
+            let reply_text = format!("{}'s megajoule balance is 0.", mentioned_username);
+            send_reply_and_mark_processed(pool, &reply_text, tweet_id, author_username).await;
+            return;
+        }
+        Err(e) => {
+            error!(
+                "Failed to lookup mentioned user @{}: {}",
+                mentioned_username, e
+            );
+            return;
+        }
+    };
+
+    match get_megajoule_balance(pool, &mentioned_user_id).await {
+        Ok(balance) => {
+            let reply_text = format!("{}'s megajoule balance is {}.", mentioned_username, balance);
+            send_reply_and_mark_processed(pool, &reply_text, tweet_id, author_username).await;
+        }
+        Err(e) => {
+            error!(
+                "Failed to get megajoule balance for @{}: {}",
+                mentioned_username, e
             );
         }
     }

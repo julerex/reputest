@@ -63,7 +63,7 @@ When Alice queries her vibe score with Diana:
 
 ### Query Your Vibes
 
-Tweet `@reputest @username?` to get your vibe scores with that user:
+Tweet `@reputest @username?` to get your vibe scores with that user, or `@reputest @username balance` for their megajoule balance (received minus sent):
 
 ```
 @reputest @elonmusk?

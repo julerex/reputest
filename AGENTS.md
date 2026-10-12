@@ -8,6 +8,7 @@ This file gives AI agents enough context to work effectively on the Reputest cod
 
 - Monitors Twitter/X for **@reputest** mentions every 30 seconds and builds a directed social graph. Good vibes (`gmgv`) and megajoule transfers work with or without the hashtag, but the tweet must tag the bot.
 - Processes **@reputest @username following?** mentions: fetches who that user follows and stores in `following` table.
+- Processes **@reputest @username balance** mentions: replies with that user's megajoule balance (received minus sent).
 - Exposes HTTP endpoints: Good Vibes dashboard, health check, **web login** (X OAuth 2.0), and an **API playground** (call X API v2 paths with the logged-in user’s token).
 - Uses a single **bot** token (from DB) for cronjobs and bot replies; **web sessions** (DB, encrypted) for login and playground.
 

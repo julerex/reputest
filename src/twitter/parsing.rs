@@ -194,6 +194,48 @@ pub fn extract_mention_with_following(text: &str) -> Option<String> {
     None
 }
 
+/// Extracts a username from a tweet that queries a megajoule balance: "@reputest @username balance".
+///
+/// Matches `@reputest`, then a username (with or without `@`), then the word `balance`
+/// (case-insensitive, optional trailing `?`). Extra text after `balance` is allowed.
+///
+/// # Returns
+///
+/// - `Some(username)`: The username if found in the balance-query format
+/// - `None`: If the tweet doesn't match or input exceeds maximum length
+pub fn extract_mention_with_balance(text: &str) -> Option<String> {
+    if text.len() > MAX_INPUT_LENGTH {
+        log::warn!(
+            "Input text exceeds maximum length ({} > {}), rejecting",
+            text.len(),
+            MAX_INPUT_LENGTH
+        );
+        return None;
+    }
+
+    let re =
+        regex::Regex::new(r"(?i)(?:^|\s)@reputest\s+(@?[a-zA-Z0-9_]{1,15})\s+balance\b").ok()?;
+
+    if let Some(captures) = re.captures(text) {
+        if let Some(username_match) = captures.get(1) {
+            let username = username_match.as_str();
+            let clean_username = username.strip_prefix('@').unwrap_or(username);
+
+            let excluded_words = [
+                "what", "when", "where", "how", "why", "who", "which", "the", "a", "an", "is",
+                "are", "was", "were", "be", "been", "being", "have", "has", "had", "do", "does",
+                "did", "will", "would", "could", "should", "can", "may", "might", "must", "shall",
+                "reputest", "balance",
+            ];
+            if !excluded_words.contains(&clean_username.to_lowercase().as_str()) {
+                return Some(clean_username.to_string());
+            }
+        }
+    }
+
+    None
+}
+
 /// Returns true if the tweet text mentions the reputest bot (`@reputest`), case-insensitive.
 ///
 /// Requires `@reputest` at a word boundary, preceded by start-of-string or ASCII whitespace
