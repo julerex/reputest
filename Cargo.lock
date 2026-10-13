@@ -1798,6 +1798,7 @@ dependencies = [
  "serde_urlencoded",
  "sha2",
  "sqlx",
+ "tigerbeetle",
  "tokio",
  "tokio-cron-scheduler",
  "tokio-test",
@@ -2469,6 +2470,10 @@ dependencies = [
  "quote",
  "syn 2.0.114",
 ]
+
+[[package]]
+name = "tigerbeetle"
+version = "0.0.0"
 
 [[package]]
 name = "time"

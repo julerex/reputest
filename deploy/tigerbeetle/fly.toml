@@ -1,0 +1,24 @@
+# Single-replica TigerBeetle cluster for the Reputest megajoule ledger.
+# Deploy from this directory: fly deploy --config deploy/tigerbeetle/fly.toml
+# The replica listens only on the Fly private network.
+
+app = 'reputest-tigerbeetle'
+primary_region = 'fra'
+
+[build]
+  dockerfile = 'Dockerfile'
+
+[env]
+  PORT = '3000'
+
+[[mounts]]
+  source = 'tigerbeetle_data'
+  destination = '/data'
+
+[[vm]]
+  cpu_kind = 'performance'
+  cpus = 4
+  memory_mb = 8192
+
+# No public service. Keep the Machine running with:
+#   fly machine update <id> --autostop=off --restart always --app reputest-tigerbeetle

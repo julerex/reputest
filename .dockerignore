@@ -1,2 +1,5 @@
 fly.toml
 .git/
+target
+third_party
+tmp

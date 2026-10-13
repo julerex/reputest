@@ -107,10 +107,15 @@ psql -d reputest -f sql/database_ddl.sql
 # Required
 export DATABASE_URL="postgres://user:password@localhost/reputest"
 export TOKEN_ENCRYPTION_KEY="$(openssl rand -hex 32)"  # 32-byte hex key
+export TB_CLUSTER_ID=1
+export TB_ADDRESS=127.0.0.1:3000
 
 # Optional
 export PORT=3000           # Default: 3000
 export RUST_LOG=info       # Options: debug, info, warn, error
+
+# Local TigerBeetle replica (leave this running in another terminal)
+./scripts/tigerbeetle_dev.sh
 ```
 
 ### 4. Twitter Bot Authorization
@@ -176,6 +181,8 @@ To use the X API playground with your own account:
 |----------|-------------|
 | `DATABASE_URL` | PostgreSQL connection string |
 | `TOKEN_ENCRYPTION_KEY` | 32-byte hex key for AES-256-GCM encryption |
+| `TB_CLUSTER_ID` | TigerBeetle cluster id (128-bit decimal; `0` is reserved for tests) |
+| `TB_ADDRESS` | TigerBeetle replica address (`127.0.0.1:3000` locally, `reputest-tigerbeetle.internal:3000` on Fly) |
 
 ### Optional Environment Variables
 
@@ -255,6 +262,7 @@ reputest/
 │   └── DEBUGGING.md          # Developer debugging guide
 ├── Cargo.toml
 ├── Dockerfile
+├── deploy/tigerbeetle/   # Single-replica TigerBeetle Fly app
 └── fly.toml              # Fly.io deployment config
 ```
 
@@ -268,6 +276,8 @@ docker build -t reputest .
 docker run -p 3000:3000 \
   -e DATABASE_URL="postgres://..." \
   -e TOKEN_ENCRYPTION_KEY="$(openssl rand -hex 32)" \
+  -e TB_CLUSTER_ID=1 \
+  -e TB_ADDRESS=127.0.0.1:3000 \
   reputest
 ```
 
@@ -291,6 +301,23 @@ fly deploy  # Updates
 # Set secrets
 fly secrets set DATABASE_URL="postgres://..."
 fly secrets set TOKEN_ENCRYPTION_KEY="$(openssl rand -hex 32)"
+fly secrets set TB_CLUSTER_ID="<128-bit decimal>"
+fly secrets set TB_ADDRESS="reputest-tigerbeetle.internal:3000"
+
+The megajoule ledger is a separate Fly app. From `deploy/tigerbeetle`:
+
+```bash
+fly apps create reputest-tigerbeetle
+fly volumes create tigerbeetle_data --size 10 --region fra --app reputest-tigerbeetle
+fly secrets set TB_CLUSTER_ID="<same 128-bit decimal>" --app reputest-tigerbeetle
+fly deploy --app reputest-tigerbeetle
+```
+
+Copy existing PostgreSQL megajoule rows once the replica is up:
+
+```bash
+fly ssh console --app reputest -C import_megajoules
+```
 ```
 
 The app is configured for:

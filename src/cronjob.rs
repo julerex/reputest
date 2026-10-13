@@ -5,10 +5,10 @@
 
 use crate::config::TwitterConfig;
 use crate::db::{
-    get_good_vibes_count, get_megajoule_balance, get_user_id_by_username, get_vibe_score_five,
-    get_vibe_score_four, get_vibe_score_one, get_vibe_score_six, get_vibe_score_three,
-    get_vibe_score_two, has_vibe_request, increment_follower_count, refresh_materialized_views,
-    save_following, save_user, save_vibe_request,
+    get_good_vibes_count, get_user_id_by_username, get_vibe_score_five, get_vibe_score_four,
+    get_vibe_score_one, get_vibe_score_six, get_vibe_score_three, get_vibe_score_two,
+    has_vibe_request, increment_follower_count, refresh_materialized_views, save_following,
+    save_user, save_vibe_request,
 };
 use crate::twitter::lookup_user_by_username;
 use crate::twitter::{
@@ -439,7 +439,18 @@ async fn process_balance_query(
         }
     };
 
-    match get_megajoule_balance(pool, &mentioned_user_id).await {
+    let ledger_user_id = match crate::ledger::parse_snowflake_id(&mentioned_user_id) {
+        Ok(id) => id,
+        Err(e) => {
+            error!(
+                "Invalid user id for megajoule balance of @{}: {}",
+                mentioned_username, e
+            );
+            return;
+        }
+    };
+
+    match crate::ledger::get_balance(ledger_user_id).await {
         Ok(balance) => {
             let reply_text = format!("{}'s megajoule balance is {}.", mentioned_username, balance);
             send_reply_and_mark_processed(pool, &reply_text, tweet_id, author_username).await;
