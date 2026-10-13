@@ -18,6 +18,7 @@ This file gives AI agents enough context to work effectively on the Reputest cod
 - **Rust** (edition 2021), **Axum** 0.7, **Tokio**
 - **PostgreSQL** via **sqlx** 0.8 (async, `runtime-tokio-native-tls`)
 - **Twitter/X API** v2: OAuth 2.0 PKCE, Bearer token, `api.twitter.com`
+- **TigerBeetle** 0.17.9 for the megajoule ledger (in-tree Rust client, not crates.io)
 - **Security**: AES-256-GCM token encryption (`crypto.rs`), rate limiting (tower_governor), security headers (CSP, X-Frame-Options, etc.)
 
 ## Layout
@@ -37,7 +38,7 @@ This file gives AI agents enough context to work effectively on the Reputest cod
 | `src/cronjob.rs` | @reputest mention cron (30s), vibe-request, following, megajoule, balance, and good-vibes handling |
 | `deploy/tigerbeetle/` | Single-replica TigerBeetle Fly app (Dockerfile, start script, fly.toml) |
 | `sql/database_ddl.sql` | Schema: refresh_tokens, access_tokens, **sessions**, users, good_vibes, **following**, views, indexes |
-| `scripts/` | Binaries: `authorize_bot`, `refresh_access_token`, `encrypt_token` |
+| `scripts/` | Binaries: `authorize_bot`, `refresh_access_token`, `encrypt_token`, `import_megajoules`. Helpers: `build_tigerbeetle_client.sh`, `tigerbeetle_dev.sh` |
 
 ## Conventions
 
@@ -56,6 +57,7 @@ This file gives AI agents enough context to work effectively on the Reputest cod
 - **Schema**: Apply `sql/database_ddl.sql` (includes `sessions` for web login). For existing DBs, run `sql/migrations/001_add_following.sql`.
 - **Tokens**: `access_tokens` and `refresh_tokens` store **encrypted** values; use `crypto::encrypt_token` / `decrypt_token`; require `TOKEN_ENCRYPTION_KEY` (32-byte hex).
 - **Sessions**: `sessions` table (id UUID, user_id, username, access_token, refresh_token encrypted, expires_at). Session ID is set in a cookie; validate and load via `db::get_session_by_id`.
+- **Megajoule ledger**: Twitter user ids are TigerBeetle account ids; tweet ids are transfer ids (replay is idempotent). Ledger `1`, code `1`. A transfer debits the sender and credits the receiver. Balance is `credits_posted - debits_posted`. Account flags stay unset, so a sender can go negative. Amount `0` and self-transfers are rejected. The PostgreSQL `megajoule` table is historical; live writes go through `src/ledger.rs`.
 
 ## Running and testing
 
@@ -81,6 +83,9 @@ The **Makefile** (see test/format/clippy targets) works around this by running *
 - **Cron expression is seven fields, seconds first.** `tokio-cron-scheduler` uses `"0/30 * * * * * *"` for every 30 seconds. A five-field crontab will not do what you think.
 - **Token refresh.** Access tokens last about two hours. On HTTP 401 the client refreshes and retries. That immediate retry can return a Cloudflare 400; if the *next* 30-second cycle is 200, the token is fine. Treat refresh failure / invalid refresh token as the real auth break, not a single 400 after refresh.
 - **TigerBeetle client release.** `zig build clients:rust -Drelease` without `-Dconfig-release=0.17.9 -Dconfig-release-client-min=0.16.4` embeds client version `65535.0.0`. The replica then evicts the session as too new. `scripts/build_tigerbeetle_client.sh` passes those flags.
+- **TigerBeetle clone needs full git history.** A `--depth 1` clone fails the Zig client build with `malformed object name HEAD^` (`git tag --merged HEAD^`). Clone the `0.17.9` tag with history. The official Rust crate is not on crates.io; Cargo uses a path dependency on gitignored `third_party/tigerbeetle/src/clients/rust`, whose `build.rs` needs `assets/tb_client.h` and `assets/lib/*/libtb_client.a` from that Zig build. Enable `overflow-checks` in this crate’s Cargo profiles.
+- **TigerBeetle addresses are IP only.** `Client::new` and `tigerbeetle start --addresses` reject hostnames. Resolve `reputest-tigerbeetle.internal:3000` to `[fdaa:…]:3000` in `ledger.rs` before connecting. The replica start script reads `fly-local-6pn` from `/etc/hosts`. Cluster id `0` is reserved for tests.
+- **Two Fly apps.** `.github/workflows/fly-deploy.yml` deploys only `reputest`. The replica is `reputest-tigerbeetle` (`deploy/tigerbeetle/`), deployed separately so a web deploy does not restart it. Do not add a public `[[services]]` / HTTP service: Fly will allocate public IPs, and the protocol is not HTTP. Keep the replica Machine with `fly machine update --autostop=off --restart always`. Replica count is fixed at format time. Re-import with `fly ssh console -a reputest -C /usr/local/bin/import_megajoules` (transfer ids make a second run a no-op).
 - **Clippy `too_many_arguments`.** Limit is 7. Pass `&MentionedTweet` into record helpers instead of exploding tweet fields.
 - **Deploy.** Push to `main` runs GitHub Actions **Fly Deploy** (`.github/workflows/fly-deploy.yml`). `fly.toml` has `min_machines_running = 1`; one Frankfurt machine started and one stopped is expected, not a failed deploy.
 - **Older docs can lag.** `docs/BOT_SETUP.md`, `docs/TROUBLESHOOTING.md`, and `.env.example` may still mention hashtag searches every 5 minutes or `xapi_access_token` in the environment. The running service loads bot tokens from the database, not those environment variables.
