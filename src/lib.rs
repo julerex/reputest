@@ -32,6 +32,7 @@ pub mod cronjob;
 pub mod crypto;
 pub mod db;
 pub mod handlers;
+pub mod ledger;
 pub mod megajoule_prices;
 pub mod oauth;
 pub mod twitter;

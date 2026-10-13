@@ -27,3 +27,9 @@ config.env
 # Schema diff temp files (make fly-db-schema-diff, make fly-db-ddl-diff)
 .schema_*.txt
 .schema_*.sql
+
+# TigerBeetle source checkout (built by scripts/build_tigerbeetle_client.sh)
+third_party/tigerbeetle/
+
+# Local TigerBeetle replica data and downloaded binary
+tmp/

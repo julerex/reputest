@@ -58,6 +58,8 @@ getrandom = "0.2"
 cookie = "0.18"
 # Form parsing for playground POST
 serde_urlencoded = "0.7"
+# Official TigerBeetle client (built by scripts/build_tigerbeetle_client.sh)
+tigerbeetle = { path = "third_party/tigerbeetle/src/clients/rust" }
 
 [dev-dependencies]
 # Testing utilities for async code
@@ -77,6 +79,11 @@ lto = true
 codegen-units = 1
 # Abort on panic instead of unwinding (smaller binary)
 panic = "abort"
+# Required by the TigerBeetle client for accounting safety
+overflow-checks = true
+
+[profile.dev]
+overflow-checks = true
 
 # Binary for bot authorization
 [[bin]]
@@ -97,3 +104,8 @@ path = "scripts/encrypt_token.rs"
 [[bin]]
 name = "setup_git_hooks"
 path = "scripts/setup_git_hooks.rs"
+
+# One-shot copy of PostgreSQL megajoule rows into TigerBeetle
+[[bin]]
+name = "import_megajoules"
+path = "scripts/import_megajoules.rs"

@@ -1438,6 +1438,7 @@ pub async fn refresh_materialized_views(
 ///
 /// - `Ok(())`: If the megajoule transfer was successfully stored
 /// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the insert fails
+#[allow(dead_code)] // PostgreSQL write path kept for the historical megajoule table.
 pub async fn save_megajoule(
     pool: &PgPool,
     tweet_id: &str,
@@ -1509,6 +1510,7 @@ pub async fn save_megajoule(
 /// - `Ok(true)`: If the tweet ID exists in the megajoule table
 /// - `Ok(false)`: If the tweet ID does not exist in the megajoule table
 /// - `Err(Box<dyn std::error::Error + Send + Sync>)`: If the query fails
+#[allow(dead_code)] // PostgreSQL dedup path kept for the historical megajoule table.
 pub async fn has_megajoule_tweet(
     pool: &PgPool,
     tweet_id: &str,
@@ -1540,6 +1542,7 @@ pub async fn has_megajoule_tweet(
 /// Returns a user's megajoule balance: total received minus total sent.
 ///
 /// Users with no megajoule rows have a balance of 0.
+#[allow(dead_code)] // Kept for PostgreSQL balance inspection; live balances use TigerBeetle.
 pub async fn get_megajoule_balance(
     pool: &PgPool,
     user_id: &str,
@@ -1635,6 +1638,44 @@ pub async fn get_all_following(
         .map(|row| FollowingRow {
             follower_username: row.get("follower_username"),
             followed_username: row.get("followed_username"),
+            created_at: row.get("created_at"),
+        })
+        .collect())
+}
+
+/// One row from the PostgreSQL megajoule table, used by the TigerBeetle importer.
+#[derive(Debug)]
+#[allow(dead_code)] // Used by the import_megajoules binary through the library crate.
+pub struct MegajouleRow {
+    pub tweet_id: String,
+    pub sender_id: String,
+    pub receiver_id: String,
+    pub amount: i32,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// Lists every megajoule transfer stored in PostgreSQL, oldest first.
+#[allow(dead_code)] // Used by the import_megajoules binary through the library crate.
+pub async fn list_megajoule_transfers(
+    pool: &PgPool,
+) -> Result<Vec<MegajouleRow>, Box<dyn std::error::Error + Send + Sync>> {
+    let rows = sqlx::query(
+        r#"
+        SELECT tweet_id, sender_id, receiver_id, amount, created_at
+        FROM megajoule
+        ORDER BY created_at ASC
+        "#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| MegajouleRow {
+            tweet_id: row.get("tweet_id"),
+            sender_id: row.get("sender_id"),
+            receiver_id: row.get("receiver_id"),
+            amount: row.get("amount"),
             created_at: row.get("created_at"),
         })
         .collect())

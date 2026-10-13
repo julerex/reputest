@@ -185,60 +185,74 @@ pub(crate) async fn record_megajoule_transfer(
         return;
     };
 
-    match crate::db::has_megajoule_tweet(pool, tweet_id).await {
-        Ok(true) => {
+    let sender_id = match crate::ledger::parse_snowflake_id(poster_id) {
+        Ok(id) => id,
+        Err(e) => {
+            error!("Invalid sender id for megajoule transfer: {}", e);
+            return;
+        }
+    };
+    let receiver_id = match crate::ledger::parse_snowflake_id(&receiver_user_id) {
+        Ok(id) => id,
+        Err(e) => {
+            error!("Invalid receiver id for megajoule transfer: {}", e);
+            return;
+        }
+    };
+    let transfer_id = match crate::ledger::parse_snowflake_id(tweet_id) {
+        Ok(id) => id,
+        Err(e) => {
+            error!("Invalid tweet id for megajoule transfer: {}", e);
+            return;
+        }
+    };
+    if amount <= 0 {
+        warn!(
+            "Skipping tweet {} from @{} sending {} megajoules to @{} - amount must be positive",
+            tweet_id, poster_username, amount, receiver_username
+        );
+        return;
+    }
+
+    match crate::ledger::record_transfer(sender_id, receiver_id, amount as u128, transfer_id).await
+    {
+        Ok(crate::ledger::TransferOutcome::AlreadyExists) => {
             info!(
                 "Skipping tweet {} from @{} sending {} megajoules to @{} (posted at {}) - already processed",
                 tweet_id, poster_username, amount, receiver_username, created_at
             );
         }
-        Ok(false) => {
-            if let Err(e) = crate::db::save_megajoule(
-                pool,
+        Ok(crate::ledger::TransferOutcome::Created) => {
+            info!(
+                "Megajoule transfer recorded from mention tweet {} (posted {}): sender @{} ({}) → receiver @{} ({}) amount {}",
                 tweet_id,
-                poster_id,
-                &receiver_user_id,
-                amount,
                 created_at,
-            )
-            .await
-            {
-                error!(
-                    "Failed to save megajoule transfer (non-constraint error): {}",
-                    e
-                );
-            } else {
-                info!(
-                    "Megajoule row recorded from mention tweet {} (posted {}): sender @{} ({}) → receiver @{} ({}) amount {}",
-                    tweet_id,
-                    created_at,
-                    poster_username,
-                    poster_id,
-                    receiver_username,
-                    receiver_user_id,
-                    amount
-                );
-                let reply_text = format!(
-                    "Your {} megajoules to {} have been noted.",
-                    amount, receiver_username
-                );
-                info!(
-                    "Replying to tweet {} with confirmation: {}",
-                    tweet_id, reply_text
-                );
-                match reply_to_tweet(&reply_text, tweet_id).await {
-                    Ok(response) => {
-                        info!("Successfully replied to tweet {}: {}", tweet_id, response);
-                    }
-                    Err(e) => {
-                        warn!("Failed to reply to tweet {}: {}", tweet_id, e);
-                    }
+                poster_username,
+                poster_id,
+                receiver_username,
+                receiver_user_id,
+                amount
+            );
+            let reply_text = format!(
+                "Your {} megajoules to {} have been noted.",
+                amount, receiver_username
+            );
+            info!(
+                "Replying to tweet {} with confirmation: {}",
+                tweet_id, reply_text
+            );
+            match reply_to_tweet(&reply_text, tweet_id).await {
+                Ok(response) => {
+                    info!("Successfully replied to tweet {}: {}", tweet_id, response);
+                }
+                Err(e) => {
+                    warn!("Failed to reply to tweet {}: {}", tweet_id, e);
                 }
             }
         }
         Err(e) => {
             error!(
-                "Failed to check if tweet {} has been processed: {}",
+                "Failed to record megajoule transfer from tweet {}: {}",
                 tweet_id, e
             );
         }

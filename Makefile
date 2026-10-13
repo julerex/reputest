@@ -220,8 +220,12 @@ fly-db-ddl-diff: ## Exact DDL diff: prod schema (pg_dump) vs sql/database_ddl.sq
 # 'error: unknown proxy name: 'Cursor-2.1.26-x86_64'; valid proxy names' error
 # when running cargo and tests with Cursor.
 
+.PHONY: tigerbeetle-client
+tigerbeetle-client: ## Clone TigerBeetle 0.17.9 and build the Rust client assets
+	./scripts/build_tigerbeetle_client.sh
+
 .PHONY: test
-test: ## Run tests
+test: tigerbeetle-client ## Run tests
 	unset ARGV0 && cargo test --no-fail-fast 2>&1
 
 .PHONY: format
@@ -229,7 +233,7 @@ format: ## Format code
 	unset ARGV0 && cargo fmt
 
 .PHONY: clippy
-clippy: ## Run clippy
+clippy: tigerbeetle-client ## Run clippy
 	unset ARGV0 && cargo clippy --all-targets --all-features -- -D warnings
 
 .PHONY: upgrade-deps

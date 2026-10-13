@@ -45,6 +45,7 @@ mod cronjob;
 mod crypto;
 mod db;
 mod handlers;
+mod ledger;
 mod megajoule_prices;
 mod oauth;
 mod twitter;
@@ -118,6 +119,15 @@ async fn main() {
         std::process::exit(1);
     }
     info!("Security configuration validated successfully");
+
+    if let Err(e) = ledger::init() {
+        log::error!("TigerBeetle is not properly configured: {}", e);
+        log::error!("Set TB_CLUSTER_ID (non-zero 128-bit decimal) and TB_ADDRESS.");
+        log::error!("For local development, run scripts/tigerbeetle_dev.sh");
+        log::error!("Refusing to start without a megajoule ledger.");
+        std::process::exit(1);
+    }
+    info!("TigerBeetle ledger client initialized");
 
     // Note: Tokens are now loaded directly from the database when needed
     // No need to pre-load them as environment variables
