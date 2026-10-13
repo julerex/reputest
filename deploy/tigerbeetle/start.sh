@@ -25,5 +25,6 @@ if [ ! -f "${DATA_FILE}" ]; then
     tigerbeetle format --cluster="${TB_CLUSTER_ID}" --replica=0 --replica-count=1 "${DATA_FILE}"
 fi
 
-echo "Starting TigerBeetle at ${ADDRESSES} cache-grid=4GiB"
-exec tigerbeetle start --addresses="${ADDRESSES}" --cache-grid=4GiB "${DATA_FILE}"
+# 1GiB is the production minimum (2048 blocks of 512KiB) and fits a 6GiB machine.
+echo "Starting TigerBeetle at ${ADDRESSES} cache-grid=1GiB"
+exec tigerbeetle start --addresses="${ADDRESSES}" --cache-grid=1GiB "${DATA_FILE}"

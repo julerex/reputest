@@ -16,9 +16,12 @@ primary_region = 'fra'
   destination = '/data'
 
 [[vm]]
-  cpu_kind = 'performance'
+  # One core is enough: TigerBeetle does not use more. Six GiB is its published
+  # minimum. Four shared CPUs are required only because Fly allows 2 GiB of
+  # memory per shared CPU.
+  cpu_kind = 'shared'
   cpus = 4
-  memory_mb = 8192
+  memory_mb = 6144
 
 # No public service. Keep the Machine running with:
 #   fly machine update <id> --autostop=off --restart always --app reputest-tigerbeetle
